@@ -25,6 +25,11 @@ function isActive(t: { to: string; match?: string[] }): boolean {
 
 <style scoped lang="scss">
 .tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
   display: flex;
   border-top: 1px solid var(--divider);
   background: var(--surface);
