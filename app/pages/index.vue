@@ -15,9 +15,9 @@ function start() {
 
 <template>
   <section>
-    <h1 class="greet display">Сегодня</h1>
+    <h1 class="greet h1">Сегодня</h1>
     <div v-if="selected" class="day-card">
-      <div class="code display">{{ selected.code }}</div>
+      <div class="code h2">{{ selected.code }}</div>
       <div class="title">{{ selected.title }}</div>
     </div>
     <select v-if="days?.length" v-model="selected" class="picker">

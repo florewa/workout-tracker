@@ -24,7 +24,7 @@ async function go() {
 
 <template>
   <section>
-    <h1 class="title display">Кто сегодня в зале?</h1>
+    <h1 class="title h1">Кто сегодня в зале?</h1>
     <ul class="list">
       <li v-for="u in users" :key="u.id" class="row" @click="session.toggleMember(u.id)">
         <span class="box" :class="{ on: isChecked(u.id) }">{{ isChecked(u.id) ? '✓' : '' }}</span>
