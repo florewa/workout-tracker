@@ -7,7 +7,7 @@ type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>
 
 export function parseAllowlist(env: string | undefined): number[] {
   if (!env) return []
-  return env.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n))
+  return env.split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0)
 }
 
 export function isAllowed(telegramId: number, allowlist: number[]): boolean {

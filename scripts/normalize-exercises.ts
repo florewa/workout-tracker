@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { isNull, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from '~~/server/db/client'
 import { exercises } from '~~/server/db/schema'
 

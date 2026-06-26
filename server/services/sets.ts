@@ -48,7 +48,7 @@ export async function lastSet(
     .select({ weight: sets.weight, reps: sets.reps })
     .from(sets)
     .where(and(eq(sets.userId, userId), inArray(sets.exerciseId, ids)))
-    .orderBy(desc(sets.createdAt))
+    .orderBy(desc(sets.createdAt), desc(sets.id))
     .limit(1)
   return row ?? null
 }

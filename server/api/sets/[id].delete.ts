@@ -6,7 +6,7 @@ import { deleteSet } from '~~/server/services/sets'
 export default defineEventHandler(async (event) => {
   await requireUser(event)
   const id = Number(getRouterParam(event, 'id'))
-  if (!Number.isInteger(id)) throw createError({ statusCode: 400, statusMessage: 'Неверный id' })
+  if (!Number.isInteger(id) || id <= 0) throw createError({ statusCode: 400, statusMessage: 'Неверный id' })
   await deleteSet(db, id)
   return { ok: true }
 })

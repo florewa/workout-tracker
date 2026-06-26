@@ -6,7 +6,7 @@ describe('normalizeName', () => {
     expect(normalizeName('  Жим  лёжа ')).toBe(normalizeName('жим лежа'))
   })
   it('унифицирует ё/е', () => {
-    expect(normalizeName('Тяга нижнего блока')).toBe(normalizeName('Тяга нижнего блока'))
+    expect(normalizeName('Ёж')).toBe(normalizeName('Еж'))
     expect(normalizeName('бабочка')).toBe('бабочка')
   })
   it('различает разные упражнения', () => {
