@@ -1,4 +1,4 @@
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import {
   workouts, workoutMembers, sets, users, exercises,
@@ -40,6 +40,24 @@ export async function listWorkouts(executor: Executor, opts: { limit?: number } 
     .groupBy(workouts.id)
     .orderBy(desc(workouts.date))
     .limit(opts.limit ?? 50)
+}
+
+export async function getActiveWorkout(
+  executor: Executor,
+  userId: number,
+): Promise<{ id: number; date: Date; dayId: number | null } | null> {
+  const [row] = await executor
+    .select({ id: workouts.id, date: workouts.date, dayId: workouts.dayId })
+    .from(workouts)
+    .innerJoin(workoutMembers, eq(workoutMembers.workoutId, workouts.id))
+    .where(and(
+      eq(workoutMembers.userId, userId),
+      isNull(workouts.finishedAt),
+      gt(workouts.startedAt, sql`now() - interval '18 hours'`),
+    ))
+    .orderBy(desc(workouts.startedAt))
+    .limit(1)
+  return row ?? null
 }
 
 export async function getWorkout(executor: Executor, id: number) {
