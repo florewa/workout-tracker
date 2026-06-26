@@ -1,6 +1,5 @@
 <script setup lang="ts">
 interface ProgramDay { id: number; code: string; title: string; order: number }
-interface ParsedDay extends ProgramDay { part: string; block: string }
 
 const api = useApi()
 const session = useSessionStore()
@@ -24,6 +23,12 @@ function dayFocus(title: string): string {
   return (m ? m[1] : title.replace(/^ДЕНЬ\s*\d+\s*[—-].*?·\s*/u, '')).trim() || title
 }
 
+function cellFocus(title: string): string {
+  const m = title.match(/\(([^)]+)\)/)
+  const raw = (m ? m[1] : title).split(',')[0]
+  return raw.replace(/\s*\+\s*/g, ' · ').replace(/·.*(сил|масс).*/i, '').trim()
+}
+
 function start() {
   if (session.currentUser) session.setMembers([session.currentUser.id])
   if (selected.value) navigateTo({ path: '/start', query: { dayId: selected.value.id } })
@@ -38,32 +43,22 @@ const eyebrow = (() => {
   return `${wd} · ${dt}`
 })()
 
-// Day matrix — parse "Верх A" → { part: "Верх", block: "A" }
-function parseCode(code: string): { part: string; block: string } | null {
-  const m = code.match(/^(.+?)\s+([A-ZА-ЯA-Za-zа-я])$/u)
-  if (!m) return null
-  return { part: m[1], block: m[2].toUpperCase() }
-}
+// Labeled axis matrix — look up the 4 known codes directly
+const COLS = [
+  { code: 'A', sub: 'сила' },
+  { code: 'B', sub: 'масса' },
+]
+const ROW_LABELS = ['Верх', 'Низ']
 
 const matrixInfo = computed(() => {
   if (!days.value?.length) return null
-  const withParsed: ParsedDay[] = []
-  for (const d of days.value) {
-    const p = parseCode(d.code)
-    if (!p) return null
-    withParsed.push({ ...d, ...p })
-  }
-  const parts = [...new Set(withParsed.map(d => d.part))]
-  const blocks = [...new Set(withParsed.map(d => d.block))]
-  if (parts.length !== 2 || blocks.length !== 2) return null
-  const map = new Map(withParsed.map(d => [`${d.part}|${d.block}`, d]))
-  const grid: ParsedDay[][] = []
-  for (const part of parts) {
-    const row = blocks.map(b => map.get(`${part}|${b}`))
-    if (row.some(c => !c)) return null
-    grid.push(row as ParsedDay[])
-  }
-  return { grid }
+  const map = new Map(days.value.map(d => [d.code, d]))
+  const rows = ROW_LABELS.map(part => ({
+    label: part,
+    cells: COLS.map(col => map.get(`${part} ${col.code}`) ?? null),
+  }))
+  if (rows.some(r => r.cells.some(c => c === null))) return null
+  return { rows: rows as { label: string; cells: ProgramDay[] }[] }
 })
 
 const metaMins = computed(() => {
@@ -79,32 +74,41 @@ const metaMins = computed(() => {
 
     <!-- Day matrix -->
     <div v-if="days?.length" class="matrix-wrap">
-      <!-- 2×2 grid -->
+      <!-- Labeled axis grid -->
       <div v-if="matrixInfo" class="matrix" role="group" aria-label="Выберите день">
-        <template v-for="(row, ri) in matrixInfo.grid" :key="ri">
+        <!-- Header row: corner + column headers -->
+        <div class="axis-corner" aria-hidden="true"></div>
+        <div v-for="col in COLS" :key="col.code" class="axis-col" aria-hidden="true">
+          <span class="axis-main">{{ col.code }}</span>
+          <span class="axis-sub">{{ col.sub }}</span>
+        </div>
+        <!-- Data rows -->
+        <template v-for="row in matrixInfo.rows" :key="row.label">
+          <div class="axis-row" aria-hidden="true">{{ row.label }}</div>
           <button
-            v-for="day in row"
+            v-for="day in row.cells"
             :key="day.id"
             class="cell"
             :class="{ 'cell--on': selected?.id === day.id }"
             :aria-pressed="selected?.id === day.id"
             @click="selected = day"
           >
-            <span class="cell-part">{{ day.part }}</span><sup class="cell-block">{{ day.block }}</sup>
+            <span class="cell-focus">{{ cellFocus(day.title) }}</span>
           </button>
         </template>
       </div>
-      <!-- Fallback: flex wrap -->
+      <!-- Fallback: flex wrap (non-standard program structure) -->
       <div v-else class="matrix-fallback">
         <button
           v-for="d in days"
           :key="d.id"
-          class="cell"
+          class="cell cell--fallback"
           :class="{ 'cell--on': selected?.id === d.id }"
           :aria-pressed="selected?.id === d.id"
           @click="selected = d"
         >
-          {{ d.code }}
+          <span class="cell-code">{{ d.code }}</span>
+          <span class="cell-focus">{{ cellFocus(d.title) }}</span>
         </button>
       </div>
     </div>
@@ -146,19 +150,59 @@ const metaMins = computed(() => {
   color: var(--muted);
 }
 
-/* Matrix */
+/* Labeled matrix grid */
 .matrix {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: auto 1fr 1fr;
   gap: var(--space-2);
+  align-items: center;
 }
 
-.matrix-fallback {
+/* Corner spacer */
+.axis-corner {
+  /* intentionally empty */
+}
+
+/* Column header (A / B) */
+.axis-col {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding-bottom: var(--space-1);
 }
 
+.axis-main {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.axis-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  opacity: 0.6;
+  line-height: 1;
+}
+
+/* Row label (Верх / Низ) */
+.axis-row {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-right: var(--space-1);
+  line-height: 1;
+}
+
+/* Cell */
 .cell {
   min-height: 64px;
   border-radius: var(--radius-md);
@@ -167,11 +211,11 @@ const metaMins = computed(() => {
   color: var(--text);
   cursor: pointer;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  font-size: 15px;
-  font-weight: 600;
+  padding: var(--space-2);
   user-select: none;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 
@@ -187,17 +231,31 @@ const metaMins = computed(() => {
   }
 }
 
-.cell-part {
-  font-family: var(--font-display);
-  font-weight: 700;
+.cell-focus {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: center;
 }
 
-.cell-block {
+/* Fallback */
+.matrix-fallback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cell--fallback {
+  flex: 1 1 auto;
+}
+
+.cell-code {
   font-family: var(--font-mono);
-  font-size: 0.65em;
-  vertical-align: super;
-  color: inherit;
-  opacity: 0.8;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
 }
 
 /* Hero card */
