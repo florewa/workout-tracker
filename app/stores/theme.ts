@@ -3,8 +3,8 @@ import { defineStore } from 'pinia'
 type Mode = 'system' | 'light' | 'dark'
 
 function systemPrefersDark(): boolean {
-  return typeof window !== 'undefined'
-    && window.matchMedia?.('(prefers-color-scheme: dark)').matches
+  if (typeof window === 'undefined') return false
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
 }
 
 export const useThemeStore = defineStore('theme', {
