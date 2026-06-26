@@ -32,13 +32,20 @@ export function validateInitData(
     throw new Error('initData: неверная подпись')
   }
 
-  const authDate = Number(params.get('auth_date'))
+  const authDateRaw = params.get('auth_date')
+  if (authDateRaw === null) throw new Error('initData: нет auth_date')
+  const authDate = Number(authDateRaw)
   if (!Number.isFinite(authDate)) throw new Error('initData: нет auth_date')
   const ageSec = Math.floor(Date.now() / 1000) - authDate
   if (ageSec > maxAgeSec) throw new Error('initData: данные устарели')
 
   const userRaw = params.get('user')
   if (!userRaw) throw new Error('initData: нет user')
-  const u = JSON.parse(userRaw) as { id: number; first_name: string; username?: string }
+  let u: { id: number; first_name: string; username?: string }
+  try {
+    u = JSON.parse(userRaw)
+  } catch {
+    throw new Error('initData: неверный user')
+  }
   return { id: u.id, firstName: u.first_name, username: u.username ?? null }
 }

@@ -33,4 +33,9 @@ describe('validateInitData', () => {
     const initData = signInitData(freshParams(nowSec - 100000), TOKEN)
     expect(() => validateInitData(initData, TOKEN, { maxAgeSec: 3600 })).toThrow()
   })
+
+  it('отклоняет данные без auth_date', () => {
+    const initData = signInitData({ query_id: 'AAA', user: userJson }, TOKEN)
+    expect(() => validateInitData(initData, TOKEN, { maxAgeSec: Number.MAX_SAFE_INTEGER })).toThrow()
+  })
 })
