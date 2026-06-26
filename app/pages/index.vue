@@ -98,6 +98,10 @@ function startWorkout() {
     navigateTo('/start?dayId=' + planned.value.id)
   }
 }
+
+function goSelect() {
+  navigateTo('/select')
+}
 </script>
 
 <template>
@@ -137,7 +141,7 @@ function startWorkout() {
         <AppButton icon="lucide:play" variant="accent" @click="startWorkout">
           Начать
         </AppButton>
-        <AppButton variant="ghost" @click="navigateTo('/select')">
+        <AppButton variant="ghost" @click="goSelect">
           Выбрать другую
         </AppButton>
       </div>
@@ -155,7 +159,7 @@ function startWorkout() {
       </div>
 
       <div class="ctas">
-        <AppButton variant="accent" @click="navigateTo('/select')">
+        <AppButton variant="accent" @click="goSelect">
           Выбрать тренировку
         </AppButton>
       </div>
