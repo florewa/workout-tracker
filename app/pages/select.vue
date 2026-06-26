@@ -28,13 +28,12 @@ function localIso(d: Date): string {
 const todayIso = localIso(new Date())
 const selectedDate = ref(todayIso)
 
-// Header date in accent — recompute when selectedDate changes
-const headerDate = computed(() => {
-  // parse as noon local time to avoid UTC offset flipping the day
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(
+// Header date recomputes when selectedDate changes; parse at noon to avoid UTC-offset day flip
+const headerDate = computed(() =>
+  new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(
     new Date(selectedDate.value + 'T12:00:00'),
-  )
-})
+  ),
+)
 
 // Fetch all data in one shot
 const { data, status } = await useAsyncData(
@@ -60,7 +59,7 @@ const { data, status } = await useAsyncData(
 )
 
 const days = computed(() => data.value?.days ?? [])
-const recentWorkouts = computed(() => (data.value?.workouts ?? []).slice(0, 3))
+const allWorkouts = computed(() => data.value?.workouts ?? [])
 
 const countMap = computed<Record<string, number>>(() => {
   const m: Record<string, number> = {}
@@ -74,6 +73,22 @@ const dayCodeMap = computed<Record<number, string>>(() => {
   return m
 })
 
+// Set of ISO dates that have at least one workout — used by WeekStrip for dots
+const workoutDatesSet = computed<Set<string>>(() => {
+  const s = new Set<string>()
+  for (const w of allWorkouts.value) {
+    const iso = localIso(new Date(w.date))
+    s.add(iso)
+  }
+  return s
+})
+
+// Workouts for the currently selected past day
+const selectedDayWorkouts = computed<Workout[]>(() => {
+  if (selectedDate.value >= todayIso) return []
+  return allWorkouts.value.filter(w => localIso(new Date(w.date)) === selectedDate.value)
+})
+
 // ISO weekday of today: Mon=1 … Sun=7
 const todayIsoWeekday = (() => {
   const js = new Date().getDay()
@@ -84,8 +99,11 @@ function isFeatured(day: ProgramDay): boolean {
   return day.weekday === todayIsoWeekday
 }
 
-function formatDate(dateStr: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(dateStr))
+// Format a date string for display
+function formatDateLabel(isoDate: string): string {
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(
+    new Date(isoDate + 'T12:00:00'),
+  )
 }
 
 function selectDay(day: ProgramDay) {
@@ -100,7 +118,7 @@ function selectDay(day: ProgramDay) {
     <div class="header">
       <div class="header-text">
         <h1 class="h1 page-title">Выбор тренировки</h1>
-        <p class="subtitle">Выбери программу на сегодня</p>
+        <p class="subtitle">{{ selectedDate === todayIso ? 'Выбери программу на сегодня' : headerDate }}</p>
       </div>
       <div class="header-date" aria-label="Текущая дата">
         <Icon name="lucide:calendar" class="calendar-icon" />
@@ -109,54 +127,69 @@ function selectDay(day: ProgramDay) {
     </div>
 
     <!-- Week strip -->
-    <WeekStrip v-model="selectedDate" />
+    <WeekStrip
+      :selected="selectedDate"
+      :workout-dates="workoutDatesSet"
+      @select="selectedDate = $event"
+    />
 
-    <!-- My programs -->
-    <div class="section-header">
-      <h2 class="h2 section-title">Мои программы</h2>
-      <span class="section-action" title="Скоро — редактор программ">＋ Новая программа</span>
-    </div>
+    <!-- ── Conditional content ── -->
 
-    <div v-if="status === 'pending'" class="skeleton-list" aria-busy="true">
-      <div v-for="n in 4" :key="n" class="skeleton-card" />
-    </div>
+    <!-- TODAY → program chooser -->
+    <template v-if="selectedDate === todayIso">
+      <div class="section-header">
+        <h2 class="h2 section-title">Мои программы</h2>
+        <span class="section-action" title="Скоро — редактор программ">＋ Новая программа</span>
+      </div>
 
-    <div v-else class="cards">
-      <ProgramCard
-        v-for="day in days"
-        :key="day.id"
-        :day="day"
-        :count="countMap[day.code] ?? 0"
-        :featured="isFeatured(day)"
-        @select="selectDay(day)"
-      />
-    </div>
+      <div v-if="status === 'pending'" class="skeleton-list" aria-busy="true">
+        <div v-for="n in 4" :key="n" class="skeleton-card" />
+      </div>
 
-    <!-- Recent workouts -->
-    <div class="section-header">
-      <h2 class="h2 section-title">Недавние тренировки</h2>
-      <span class="section-action" title="Скоро">Смотреть все</span>
-    </div>
+      <div v-else class="cards">
+        <ProgramCard
+          v-for="day in days"
+          :key="day.id"
+          :day="day"
+          :count="countMap[day.code] ?? 0"
+          :featured="isFeatured(day)"
+          @select="selectDay(day)"
+        />
+      </div>
+    </template>
 
-    <div v-if="recentWorkouts.length" class="recent-list">
-      <button
-        v-for="w in recentWorkouts"
-        :key="w.id"
-        class="recent-row"
-        @click="navigateTo('/workout/' + w.id)"
-      >
-        <span class="recent-badge" aria-hidden="true">
-          <Icon name="lucide:dumbbell" class="badge-icon" />
-        </span>
-        <span class="recent-name">{{ w.dayId ? (dayCodeMap[w.dayId] ?? 'Тренировка') : 'Тренировка' }}</span>
-        <span class="recent-date">{{ formatDate(w.date) }}</span>
-        <Icon name="lucide:chevron-right" class="recent-chevron" aria-hidden="true" />
-      </button>
-    </div>
+    <!-- PAST DAY WITH WORKOUT(S) -->
+    <template v-else-if="selectedDate < todayIso && selectedDayWorkouts.length > 0">
+      <div class="section-header">
+        <h2 class="h2 section-title">Тренировка {{ formatDateLabel(selectedDate) }}</h2>
+      </div>
 
-    <p v-else-if="status !== 'pending'" class="empty-recent">
-      Пока нет тренировок — начни первую сегодня
-    </p>
+      <div class="workout-list">
+        <button
+          v-for="w in selectedDayWorkouts"
+          :key="w.id"
+          class="workout-row"
+          @click="navigateTo('/workout/' + w.id)"
+        >
+          <span class="workout-badge" aria-hidden="true">
+            <Icon name="lucide:dumbbell" class="badge-icon" />
+          </span>
+          <span class="workout-name">
+            {{ w.dayId ? (dayCodeMap[w.dayId] ?? 'Тренировка') : 'Тренировка' }}
+          </span>
+          <span class="workout-meta">
+            <Icon name="lucide:users" class="meta-icon" aria-hidden="true" />
+            {{ w.memberCount }}
+          </span>
+          <Icon name="lucide:chevron-right" class="workout-chevron" aria-hidden="true" />
+        </button>
+      </div>
+    </template>
+
+    <!-- PAST DAY WITHOUT WORKOUT -->
+    <template v-else-if="selectedDate < todayIso">
+      <p class="empty-day">В этот день тренировок не было</p>
+    </template>
   </section>
 </template>
 
@@ -250,6 +283,7 @@ function selectDay(day: ProgramDay) {
   border-radius: var(--radius-lg);
   background: var(--surface);
   border: 1px solid var(--divider);
+
   @media (prefers-reduced-motion: no-preference) {
     animation: pulse 1.4s ease-in-out infinite;
   }
@@ -260,15 +294,15 @@ function selectDay(day: ProgramDay) {
   50% { opacity: 0.5; }
 }
 
-/* ── Recent workouts ── */
-.recent-list {
+/* ── Past-day workout list ── */
+.workout-list {
   background: var(--surface);
   border: 1px solid var(--divider);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
-.recent-row {
+.workout-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -282,14 +316,18 @@ function selectDay(day: ProgramDay) {
   color: var(--text);
   text-align: left;
 
-  &:last-child { border-bottom: none; }
+  &:last-child {
+    border-bottom: none;
+  }
 
   @media (prefers-reduced-motion: no-preference) {
     transition: background 0.1s;
   }
 
   @media (hover: hover) {
-    &:hover { background: var(--surface-2); }
+    &:hover {
+      background: var(--surface-2);
+    }
   }
 
   &:focus-visible {
@@ -298,7 +336,7 @@ function selectDay(day: ProgramDay) {
   }
 }
 
-.recent-badge {
+.workout-badge {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -309,31 +347,41 @@ function selectDay(day: ProgramDay) {
   flex-shrink: 0;
 }
 
-.badge-icon { font-size: 16px; }
+.badge-icon {
+  font-size: 16px;
+}
 
-.recent-name {
+.workout-name {
   flex: 1;
   font-size: 15px;
   font-weight: 600;
 }
 
-.recent-date {
+.workout-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 13px;
   color: var(--muted);
   flex-shrink: 0;
 }
 
-.recent-chevron {
+.meta-icon {
+  font-size: 14px;
+}
+
+.workout-chevron {
   font-size: 16px;
   color: var(--muted);
   flex-shrink: 0;
 }
 
-.empty-recent {
+/* ── Empty past day ── */
+.empty-day {
   margin: 0;
   text-align: center;
   color: var(--muted);
   font-size: 14px;
-  padding: var(--space-5) 0;
+  padding: var(--space-6) 0;
 }
 </style>
