@@ -277,7 +277,6 @@ const metaMins = computed(() => {
 .hero-code {
   font-family: var(--font-display);
   font-weight: 800;
-  font-stretch: 125%;
   font-size: clamp(34px, 11vw, 46px);
   color: var(--accent);
   line-height: 1;
