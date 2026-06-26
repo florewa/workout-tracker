@@ -12,5 +12,8 @@ export default defineConfig({
     passWithNoTests: true,
     include: ['test/**/*.test.ts'],
     setupFiles: ['./test/setup.test-db.ts'],
+    // Все сервис-тесты используют одну тестовую БД и делают TRUNCATE в beforeEach,
+    // поэтому файлы должны идти последовательно, иначе они затирают данные друг друга.
+    fileParallelism: false,
   },
 })
