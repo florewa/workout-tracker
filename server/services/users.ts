@@ -1,9 +1,16 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import { users } from '~~/server/db/schema'
 import type { TelegramUser } from '~~/server/utils/telegram'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
+
+export async function listUsers(executor: Executor): Promise<{ id: number; name: string }[]> {
+  return executor
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .orderBy(asc(users.name))
+}
 
 export function parseAllowlist(env: string | undefined): number[] {
   if (!env) return []

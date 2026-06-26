@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb } from '../helpers/db'
 import { users } from '~~/server/db/schema'
-import { resolveUser, isAllowed, parseAllowlist } from '~~/server/services/users'
+import { resolveUser, isAllowed, parseAllowlist, listUsers } from '~~/server/services/users'
 
 beforeEach(async () => { await resetDb() })
 
@@ -28,6 +28,14 @@ describe('resolveUser', () => {
     expect(u.name).toBe('Кирилл')
     const rows = await testDb.select().from(users).where(eq(users.telegramId, 123))
     expect(rows.length).toBe(1)
+  })
+})
+
+describe('listUsers', () => {
+  it('возвращает всех пользователей по имени', async () => {
+    await testDb.insert(users).values([{ name: 'Егор' }, { name: 'Данил' }])
+    const list = await listUsers(testDb)
+    expect(list.map((u) => u.name)).toEqual(['Данил', 'Егор'])
   })
 })
 
