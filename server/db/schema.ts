@@ -26,6 +26,7 @@ export const programDays = pgTable('program_days', {
   code: varchar('code', { length: 20 }).notNull().unique(),
   title: varchar('title', { length: 200 }).notNull(),
   order: integer('order').notNull(),
+  weekday: integer('weekday'), // ISO weekday 1..7, nullable
 })
 
 export const programExercises = pgTable('program_exercises', {

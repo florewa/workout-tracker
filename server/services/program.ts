@@ -6,7 +6,7 @@ type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>
 
 export async function listProgramDays(executor: Executor) {
   return executor
-    .select({ id: programDays.id, code: programDays.code, title: programDays.title, order: programDays.order })
+    .select({ id: programDays.id, code: programDays.code, title: programDays.title, order: programDays.order, weekday: programDays.weekday })
     .from(programDays)
     .orderBy(asc(programDays.order))
 }
@@ -26,5 +26,5 @@ export async function getProgramDay(executor: Executor, code: string) {
     .innerJoin(exercises, eq(programExercises.exerciseId, exercises.id))
     .where(eq(programExercises.dayId, day.id))
     .orderBy(asc(programExercises.order))
-  return { day: { id: day.id, code: day.code, title: day.title, order: day.order }, exercises: rows }
+  return { day: { id: day.id, code: day.code, title: day.title, order: day.order, weekday: day.weekday }, exercises: rows }
 }

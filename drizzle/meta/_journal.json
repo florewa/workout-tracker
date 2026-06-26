@@ -15,6 +15,13 @@
       "when": 1782462906073,
       "tag": "0001_clever_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782478781282,
+      "tag": "0002_perfect_maelstrom",
+      "breakpoints": true
     }
   ]
 }
