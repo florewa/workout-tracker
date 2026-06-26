@@ -6,15 +6,18 @@ const route = useRoute()
 
 const { data: users } = await useAsyncData('users', () => api.get<UserLite[]>('/api/users'), { server: false })
 const dayId = computed(() => (route.query.dayId ? Number(route.query.dayId) : null))
+const dateParam = computed(() => route.query.date as string | undefined)
 
 function isChecked(id: number) { return session.selectedMemberIds.includes(id) }
 
 async function go() {
   try {
-    const { id } = await api.post<{ id: number }>('/api/workouts', {
+    const body: { dayId: number | null; memberIds: number[]; date?: string } = {
       dayId: dayId.value,
       memberIds: session.selectedMemberIds,
-    })
+    }
+    if (dateParam.value) body.date = dateParam.value
+    const { id } = await api.post<{ id: number }>('/api/workouts', body)
     navigateTo(`/workout/${id}`)
   } catch {
     alert('Не удалось создать тренировку. Попробуй ещё раз.')

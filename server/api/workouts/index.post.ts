@@ -5,10 +5,18 @@ import { createWorkout } from '~~/server/services/workouts'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
-  const body = await readBody<{ dayId?: number | null; memberIds?: number[] }>(event)
+  const body = await readBody<{ dayId?: number | null; memberIds?: number[]; date?: string }>(event)
+
+  let workoutDate: Date | undefined
+  if (body?.date) {
+    const parsed = new Date(body.date)
+    if (!Number.isNaN(parsed.getTime())) workoutDate = parsed
+  }
+
   return createWorkout(db, {
     createdBy: user.id,
     dayId: body?.dayId ?? null,
     memberIds: Array.isArray(body?.memberIds) ? body.memberIds : [],
+    ...(workoutDate ? { date: workoutDate } : {}),
   })
 })
