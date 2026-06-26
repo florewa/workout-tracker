@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import type ExcelJS from 'exceljs'
 import {
   loadWorkbook, parseReference, parseJournal, parseProgram,
-} from '~/scripts/parse-xlsx'
+} from '~~/scripts/parse-xlsx'
 
 const FILE = 'data/План тренировок.xlsx'
 let wb: ExcelJS.Workbook

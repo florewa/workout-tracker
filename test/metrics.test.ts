@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { e1rm, tonnage } from '~/server/utils/metrics'
+import { e1rm, tonnage } from '~~/server/utils/metrics'
 
 describe('tonnage', () => {
   it('перемножает вес и повторы', () => {
