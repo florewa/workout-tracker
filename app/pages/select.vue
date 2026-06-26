@@ -110,6 +110,10 @@ function selectDay(day: ProgramDay) {
   session.setMembers(session.currentUser ? [session.currentUser.id] : [])
   navigateTo(`/start?dayId=${day.id}&date=${selectedDate.value}`)
 }
+
+function openWorkout(id: number) {
+  navigateTo('/workout/' + id)
+}
 </script>
 
 <template>
@@ -169,7 +173,7 @@ function selectDay(day: ProgramDay) {
           v-for="w in selectedDayWorkouts"
           :key="w.id"
           class="workout-row"
-          @click="navigateTo('/workout/' + w.id)"
+          @click="openWorkout(w.id)"
         >
           <span class="workout-badge" aria-hidden="true">
             <Icon name="lucide:dumbbell" class="badge-icon" />
