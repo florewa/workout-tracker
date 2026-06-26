@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   ssr: false,
   devtools: { enabled: true },
   typescript: { strict: true },
-  modules: ['@pinia/nuxt'],
+  modules: ['@pinia/nuxt', '@nuxt/fonts'],
   css: ['~/assets/styles/main.scss'],
   app: {
     head: {

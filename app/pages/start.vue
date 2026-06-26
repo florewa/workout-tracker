@@ -4,7 +4,7 @@ const api = useApi()
 const session = useSessionStore()
 const route = useRoute()
 
-const { data: users } = await useAsyncData('users', () => api.get<UserLite[]>('/api/users'))
+const { data: users } = await useAsyncData('users', () => api.get<UserLite[]>('/api/users'), { server: false })
 const dayId = computed(() => (route.query.dayId ? Number(route.query.dayId) : null))
 
 function isChecked(id: number) { return session.selectedMemberIds.includes(id) }
@@ -20,7 +20,7 @@ async function go() {
 
 <template>
   <section>
-    <h1 class="title">Кто сегодня в зале?</h1>
+    <h1 class="title display">Кто сегодня в зале?</h1>
     <ul class="list">
       <li v-for="u in users" :key="u.id" class="row" @click="session.toggleMember(u.id)">
         <span class="box" :class="{ on: isChecked(u.id) }">{{ isChecked(u.id) ? '✓' : '' }}</span>

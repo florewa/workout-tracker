@@ -13,3 +13,11 @@ html, body {
 
 button { font: inherit; }
 a { color: inherit; }
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 125%; /* «expanded» начертание Archivo */
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
