@@ -1,5 +1,6 @@
 :root {
   --font-display: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
   --space-4: 16px; --space-5: 24px; --space-6: 32px;
   --radius-sm: 10px; --radius-md: 14px; --radius-lg: 18px;
@@ -13,6 +14,7 @@
   --text: #f0ede4;
   --muted: #9298a2;
   --accent: #ff5a1f;
+  --accent-2: #ff8a3d;
   --accent-text: #14161a;
   --pr: #3ddc84;
   --divider: #272b33;
@@ -25,6 +27,7 @@
   --text: #16181c;
   --muted: #6b7280;
   --accent: #ff5a1f;
+  --accent-2: #ff7a33;
   --accent-text: #ffffff;
   --pr: #18a957;
   --divider: #e5e5e1;
