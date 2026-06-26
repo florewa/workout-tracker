@@ -14,6 +14,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:test": "drizzle-kit migrate --config=drizzle.config.test.ts",
     "import": "tsx scripts/import-xlsx.ts",
+    "normalize": "tsx scripts/normalize-exercises.ts",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
