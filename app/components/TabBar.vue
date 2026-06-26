@@ -1,17 +1,22 @@
 <script setup lang="ts">
+const route = useRoute()
 const tabs = [
-  { to: '/', label: 'Тренировка' },
+  { to: '/', label: 'Тренировка', match: ['/', '/start', '/workout'] },
   { to: '/progress', label: 'Прогресс' },
   { to: '/history', label: 'История' },
   { to: '/settings', label: 'Настройки' },
 ]
+function isActive(t: { to: string; match?: string[] }): boolean {
+  const paths = t.match ?? [t.to]
+  return paths.some((p) =>
+    p === '/' ? route.path === '/' : route.path === p || route.path.startsWith(p + '/'),
+  )
+}
 </script>
 
 <template>
   <nav class="tabbar">
-    <NuxtLink v-for="t in tabs" :key="t.to" :to="t.to" class="tab">
-      {{ t.label }}
-    </NuxtLink>
+    <NuxtLink v-for="t in tabs" :key="t.to" :to="t.to" class="tab" :class="{ active: isActive(t) }">{{ t.label }}</NuxtLink>
   </nav>
 </template>
 
@@ -29,6 +34,6 @@ const tabs = [
   font-size: 12px;
   color: var(--muted);
   text-decoration: none;
-  &.router-link-exact-active { color: var(--accent); }
+  &.active { color: var(--accent); }
 }
 </style>

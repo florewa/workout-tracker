@@ -10,11 +10,15 @@ const dayId = computed(() => (route.query.dayId ? Number(route.query.dayId) : nu
 function isChecked(id: number) { return session.selectedMemberIds.includes(id) }
 
 async function go() {
-  const { id } = await api.post<{ id: number }>('/api/workouts', {
-    dayId: dayId.value,
-    memberIds: session.selectedMemberIds,
-  })
-  navigateTo(`/workout/${id}`)
+  try {
+    const { id } = await api.post<{ id: number }>('/api/workouts', {
+      dayId: dayId.value,
+      memberIds: session.selectedMemberIds,
+    })
+    navigateTo(`/workout/${id}`)
+  } catch {
+    alert('Не удалось создать тренировку. Попробуй ещё раз.')
+  }
 }
 </script>
 

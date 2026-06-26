@@ -1,11 +1,13 @@
 <script setup lang="ts">
 interface ProgramDay { id: number; code: string; title: string; order: number }
 const api = useApi()
+const session = useSessionStore()
 const { data: days } = await useAsyncData('program-days', () => api.get<ProgramDay[]>('/api/program/days'), { server: false })
 const selected = ref<ProgramDay | null>(null)
 watchEffect(() => { if (days.value?.length && !selected.value) selected.value = days.value[0] })
 
 function start() {
+  if (session.currentUser) session.setMembers([session.currentUser.id])
   if (selected.value) navigateTo({ path: '/start', query: { dayId: selected.value.id } })
   else navigateTo('/start')
 }

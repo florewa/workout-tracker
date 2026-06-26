@@ -1,9 +1,9 @@
 <script setup lang="ts">
-defineProps<{ variant?: 'accent' | 'ghost' }>()
+defineProps<{ variant?: 'accent' | 'ghost'; disabled?: boolean }>()
 </script>
 
 <template>
-  <button :class="['btn', variant ?? 'accent']">
+  <button :class="['btn', variant ?? 'accent']" :disabled="disabled">
     <slot />
   </button>
 </template>
@@ -18,6 +18,7 @@ defineProps<{ variant?: 'accent' | 'ghost' }>()
   font-weight: 600;
   cursor: pointer;
 }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .accent { background: var(--accent); color: var(--accent-text); }
 .ghost {
   background: transparent;
