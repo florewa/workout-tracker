@@ -10,7 +10,8 @@ afterAll(() => { vi.unstubAllGlobals() })
 describe('TabBar', () => {
   it('рендерит 4 вкладки', () => {
     const wrapper = mount(TabBar, {
-      global: { stubs: { NuxtLink: RouterLinkStub } },
+      // Icon is auto-registered by @nuxt/icon at runtime but not in vitest; stub it
+      global: { stubs: { NuxtLink: RouterLinkStub, Icon: true } },
     })
     const links = wrapper.findAllComponents(RouterLinkStub)
     expect(links).toHaveLength(4)

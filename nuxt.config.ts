@@ -5,7 +5,10 @@ export default defineNuxtConfig({
   ssr: false,
   devtools: { enabled: true },
   typescript: { strict: true },
-  modules: ['@pinia/nuxt', '@nuxt/fonts'],
+  modules: ['@pinia/nuxt', '@nuxt/fonts', '@nuxt/icon'],
+  icon: {
+    clientBundle: { scan: true, includeCustomCollections: true },
+  },
   css: ['~/assets/styles/main.scss'],
   app: {
     head: {

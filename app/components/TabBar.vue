@@ -1,10 +1,10 @@
 <script setup lang="ts">
 const route = useRoute()
 const tabs = [
-  { to: '/', label: 'Тренировка', match: ['/', '/start', '/workout'] },
-  { to: '/progress', label: 'Прогресс' },
-  { to: '/history', label: 'История' },
-  { to: '/settings', label: 'Настройки' },
+  { to: '/', label: 'Тренировка', icon: 'lucide:dumbbell', match: ['/', '/start', '/workout'] },
+  { to: '/progress', label: 'Прогресс', icon: 'lucide:trending-up' },
+  { to: '/history', label: 'История', icon: 'lucide:history' },
+  { to: '/settings', label: 'Настройки', icon: 'lucide:settings' },
 ]
 function isActive(t: { to: string; match?: string[] }): boolean {
   const paths = t.match ?? [t.to]
@@ -16,7 +16,10 @@ function isActive(t: { to: string; match?: string[] }): boolean {
 
 <template>
   <nav class="tabbar">
-    <NuxtLink v-for="t in tabs" :key="t.to" :to="t.to" class="tab" :class="{ active: isActive(t) }">{{ t.label }}</NuxtLink>
+    <NuxtLink v-for="t in tabs" :key="t.to" :to="t.to" class="tab" :class="{ active: isActive(t) }">
+      <Icon :name="t.icon" class="ic" />
+      <span>{{ t.label }}</span>
+    </NuxtLink>
   </nav>
 </template>
 
@@ -35,5 +38,10 @@ function isActive(t: { to: string; match?: string[] }): boolean {
   color: var(--muted);
   text-decoration: none;
   &.active { color: var(--accent); }
+}
+.ic {
+  font-size: 22px;
+  display: block;
+  margin: 0 auto 3px;
 }
 </style>

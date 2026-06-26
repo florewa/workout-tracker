@@ -27,7 +27,9 @@
     "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.114",
     "@nuxt/fonts": "^0.14.0",
+    "@nuxt/icon": "^2.2.4",
     "@pinia/testing": "^1.0.3",
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^6.0.7",
