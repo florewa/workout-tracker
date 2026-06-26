@@ -23,33 +23,105 @@ async function go() {
 </script>
 
 <template>
-  <section>
-    <h1 class="title h1">Кто сегодня в зале?</h1>
+  <section class="page">
+    <h1 class="screen-title h1">Кто сегодня в зале?</h1>
     <ul class="list">
-      <li v-for="u in users" :key="u.id" class="row" @click="session.toggleMember(u.id)">
-        <span class="box" :class="{ on: isChecked(u.id) }">{{ isChecked(u.id) ? '✓' : '' }}</span>
-        <span>{{ u.name }}</span>
+      <li
+        v-for="u in users"
+        :key="u.id"
+        class="row"
+        :class="{ selected: isChecked(u.id) }"
+        @click="session.toggleMember(u.id)"
+      >
+        <span class="avatar">{{ u.name.charAt(0).toUpperCase() }}</span>
+        <span class="name">{{ u.name }}</span>
+        <span class="check-circle" :class="{ active: isChecked(u.id) }">
+          <Icon name="lucide:check" class="check-icon" />
+        </span>
       </li>
     </ul>
     <div class="cta">
-      <AppButton :disabled="!session.selectedMemberIds.length" @click="go">Поехали →</AppButton>
+      <AppButton icon="lucide:arrow-right" :disabled="!session.selectedMemberIds.length" @click="go">Поехали</AppButton>
     </div>
   </section>
 </template>
 
 <style scoped lang="scss">
-.title { font-size: 22px; margin: 4px 0 16px; }
-.list { list-style: none; padding: 0; margin: 0 0 16px; }
+.page {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.screen-title {
+  margin: 0;
+  color: var(--text);
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
 .row {
-  display: flex; align-items: center; gap: 12px;
-  min-height: 56px; padding: 0 4px; cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding: var(--space-2) var(--space-1);
+  cursor: pointer;
   border-bottom: 1px solid var(--divider);
+  transition: background 0.1s;
+
+  &:last-child {
+    border-bottom: none;
+  }
 }
-.box {
-  width: 26px; height: 26px; border-radius: 7px;
-  border: 1px solid var(--divider); display: grid; place-items: center;
-  color: var(--accent-text);
-  &.on { background: var(--accent); border-color: var(--accent); }
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
-.cta { margin-top: 8px; }
+
+.name {
+  flex: 1;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.check-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--divider);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+  color: transparent;
+
+  .check-icon {
+    font-size: 16px;
+  }
+
+  &.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+}
+
+.cta {
+  margin-top: var(--space-2);
+}
 </style>
