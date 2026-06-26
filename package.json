@@ -12,6 +12,7 @@
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:test": "drizzle-kit migrate --config=drizzle.config.test.ts",
     "import": "tsx scripts/import-xlsx.ts",
     "postinstall": "nuxt prepare"
   },
