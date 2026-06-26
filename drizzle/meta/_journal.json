@@ -8,6 +8,13 @@
       "when": 1782459388793,
       "tag": "0000_happy_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782462906073,
+      "tag": "0001_clever_red_ghost",
+      "breakpoints": true
     }
   ]
 }

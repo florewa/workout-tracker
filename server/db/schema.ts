@@ -1,6 +1,6 @@
 import {
   pgTable, serial, integer, bigint, varchar, text, real,
-  timestamp, boolean, primaryKey,
+  timestamp, boolean, primaryKey, index, type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
@@ -18,6 +18,7 @@ export const exercises = pgTable('exercises', {
   defaultReps: varchar('default_reps', { length: 40 }),
   defaultTempo: varchar('default_tempo', { length: 20 }),
   isArchived: boolean('is_archived').notNull().default(false),
+  aliasOf: integer('alias_of').references((): AnyPgColumn => exercises.id),
 })
 
 export const programDays = pgTable('program_days', {
@@ -46,7 +47,9 @@ export const workouts = pgTable('workouts', {
   note: text('note'),
   startedAt: timestamp('started_at'),
   finishedAt: timestamp('finished_at'),
-})
+}, (t) => ({
+  dateIdx: index('workouts_date_idx').on(t.date),
+}))
 
 export const workoutMembers = pgTable('workout_members', {
   workoutId: integer('workout_id').notNull().references(() => workouts.id),
@@ -65,4 +68,6 @@ export const sets = pgTable('sets', {
   reps: integer('reps').notNull(),
   note: text('note'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-})
+}, (t) => ({
+  userExerciseIdx: index('sets_user_exercise_idx').on(t.userId, t.exerciseId, t.createdAt),
+}))
