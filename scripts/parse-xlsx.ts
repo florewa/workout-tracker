@@ -38,6 +38,7 @@ function text(value: ExcelJS.CellValue): string {
 }
 
 function num(value: ExcelJS.CellValue): number | null {
+  if (typeof value === 'boolean') return null
   if (value == null || value === '') return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
@@ -79,7 +80,7 @@ export function parseJournal(wb: ExcelJS.Workbook): JournalRow[] {
 const DAY_HEADER = /^ДЕНЬ\s+\d+/u
 // из "... · ВЕРХ A (...)" достаём код "ВЕРХ A" -> нормализуем в "Верх A"
 function parseDayCode(header: string): string {
-  const match = header.match(/·\s*([А-ЯЁ]+)\s+([A-B])/u)
+  const match = header.match(/·\s*([А-ЯЁ]+)\s+([AB])/u)
   if (!match) return header.slice(0, 20)
   const word = match[1]
   const normalized = word.charAt(0) + word.slice(1).toLowerCase()
@@ -106,13 +107,12 @@ export function parseProgram(wb: ExcelJS.Workbook): ProgramDay[] {
     }
     if (!current) return
     if (a === '№' || a === '') return // заголовок колонок или пустая
-    // строки упражнений: C1 — порядковый номер (1,2,3…) или "П" (прехаб)
+    // строки упражнений: колонка A — порядковый номер (1,2,3…) или "П" (прехаб)
     // описания тренировки — объединённые ячейки с одинаковым текстом везде
     const isExerciseRow = /^\d+$/.test(a) || a === 'П'
     if (!isExerciseRow) return
     const name = text(row.getCell(2).value)
     if (!name) return
-    // строка упражнения: № либо число (1.0), либо "П" (прехаб)
     current.exercises.push({
       order: current.exercises.length + 1,
       name,
