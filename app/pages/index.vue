@@ -19,13 +19,7 @@ const session = useSessionStore()
 // Today's ISO weekday: Mon=1 … Sun=7
 const isoToday = ((new Date().getDay() + 6) % 7) + 1
 
-// Fetch program days and active workout in parallel
-const { data: days } = await useAsyncData(
-  'program-days',
-  () => api.get<ProgramDay[]>('/api/program/days'),
-  { server: false },
-)
-
+// Check for an active workout first — redirect immediately if one exists
 const { data: active } = await useAsyncData(
   'active-workout',
   async () => {
@@ -35,6 +29,18 @@ const { data: active } = await useAsyncData(
       return null
     }
   },
+  { server: false },
+)
+
+// Redirect straight into the recording screen (replace so home isn't in history)
+if (active.value?.id) {
+  await navigateTo('/workout/' + active.value.id, { replace: true })
+}
+
+// Only fetch program days when no redirect happened
+const { data: days } = await useAsyncData(
+  'program-days',
+  () => api.get<ProgramDay[]>('/api/program/days'),
   { server: false },
 )
 
@@ -51,32 +57,18 @@ function dayFocus(title: string): string {
   return m ? m[1].trim() : ''
 }
 
-// Derived state
-const activeDay = computed<ProgramDay | null>(() => {
-  if (!active.value?.id) return null
-  const dayId = active.value.dayId
-  if (dayId == null) return null
-  return days.value?.find(d => d.id === dayId) ?? null
-})
-
 const planned = computed<ProgramDay | null>(() =>
   days.value?.find(d => d.weekday === isoToday) ?? null,
 )
 
-// The card day: active state uses activeDay, planned state uses planned
-const cardDay = computed<ProgramDay | null>(() => {
-  if (active.value?.id) return activeDay.value
-  return planned.value
-})
-
 const heroPhoto = computed<string | null>(() =>
-  cardDay.value ? (PHOTO_MAP[cardDay.value.code] ?? null) : null,
+  planned.value ? (PHOTO_MAP[planned.value.code] ?? null) : null,
 )
 
-// Exercise count for the card day (states A & B)
+// Exercise count for the planned day (state B)
 const exCount = ref<number | null>(null)
 watch(
-  cardDay,
+  planned,
   async (d) => {
     if (!d) { exCount.value = null; return }
     try {
@@ -89,16 +81,13 @@ watch(
   { immediate: true },
 )
 
-// State discriminant
-const state = computed<'active' | 'planned' | 'rest'>(() => {
-  if (active.value?.id) return 'active'
+// State discriminant: active workouts redirect away, so only planned or rest remain
+const state = computed<'planned' | 'rest'>(() => {
   if (planned.value) return 'planned'
   return 'rest'
 })
 
-// Headings per state
 const stateHeading = computed(() => {
-  if (state.value === 'active') return 'Тренировка идёт'
   if (state.value === 'planned') return 'Сегодня по плану'
   return 'Сегодня по плану отдых'
 })
@@ -109,19 +98,13 @@ function startWorkout() {
     navigateTo('/start?dayId=' + planned.value.id)
   }
 }
-
-function continueWorkout() {
-  if (active.value?.id) {
-    navigateTo('/workout/' + active.value.id)
-  }
-}
 </script>
 
 <template>
   <section class="page">
 
-    <!-- ── STATE A & B: heading above card ── -->
-    <template v-if="state === 'active' || state === 'planned'">
+    <!-- ── STATE B: planned day today ── -->
+    <template v-if="state === 'planned'">
       <!-- Section heading — on the page background, NOT over the photo -->
       <h1 class="section-heading">{{ stateHeading }}</h1>
 
@@ -137,13 +120,13 @@ function continueWorkout() {
         <!-- Gradient overlay -->
         <div class="hero-overlay" aria-hidden="true" />
 
-        <!-- Card content: day code + focus + meta only (no section heading here) -->
+        <!-- Card content: day code + focus + meta -->
         <div class="hero-content">
           <h2 class="hero-code">
-            {{ cardDay ? cardDay.code : 'Тренировка' }}
+            {{ planned ? planned.code : 'Тренировка' }}
           </h2>
-          <p v-if="cardDay && dayFocus(cardDay.title)" class="hero-focus">
-            {{ dayFocus(cardDay.title) }}
+          <p v-if="planned && dayFocus(planned.title)" class="hero-focus">
+            {{ dayFocus(planned.title) }}
           </p>
           <p v-if="exCount !== null" class="hero-meta">{{ exCount }} упражнений</p>
         </div>
@@ -151,22 +134,12 @@ function continueWorkout() {
 
       <!-- CTAs -->
       <div class="ctas">
-        <!-- State A: active workout -->
-        <template v-if="state === 'active'">
-          <AppButton icon="lucide:play" variant="accent" @click="continueWorkout">
-            Продолжить
-          </AppButton>
-        </template>
-
-        <!-- State B: planned day, no active -->
-        <template v-else>
-          <AppButton icon="lucide:play" variant="accent" @click="startWorkout">
-            Начать
-          </AppButton>
-          <AppButton variant="ghost" @click="navigateTo('/select')">
-            Выбрать другую
-          </AppButton>
-        </template>
+        <AppButton icon="lucide:play" variant="accent" @click="startWorkout">
+          Начать
+        </AppButton>
+        <AppButton variant="ghost" @click="navigateTo('/select')">
+          Выбрать другую
+        </AppButton>
       </div>
     </template>
 
