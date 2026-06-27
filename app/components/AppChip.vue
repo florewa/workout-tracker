@@ -14,13 +14,4 @@ defineProps<{ active?: boolean }>()
   color: var(--text); font-size: 15px;
   &.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 }
-
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .chip:not(.active) {
-    border-color: transparent;
-    background:
-      linear-gradient(transparent, transparent) padding-box,
-      var(--glass-edge) border-box;
-  }
-}
 </style>

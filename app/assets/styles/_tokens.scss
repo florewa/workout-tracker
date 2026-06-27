@@ -29,6 +29,13 @@
     rgba(255, 255, 255, 0) 70%
   );
   --glass-edge-flat: rgba(255, 255, 255, 0.10);
+  /* Edge for small controls: stays visible all around, fade pushed to the end */
+  --edge-grad: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.30),
+    rgba(255, 255, 255, 0.14) 65%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
   --glass-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
 
   /* Ambient backdrop — gives the blur something to pick up */
@@ -59,6 +66,13 @@
     rgba(0, 0, 0, 0) 70%
   );
   --glass-edge-flat: rgba(0, 0, 0, 0.08);
+  /* Edge for small controls: stays visible all around, fade pushed to the end */
+  --edge-grad: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.18),
+    rgba(0, 0, 0, 0.09) 65%,
+    rgba(0, 0, 0, 0.04) 100%
+  );
   --glass-shadow: 0 8px 28px rgba(0, 0, 0, 0.10);
 
   /* Ambient backdrop — gives the blur something to pick up */

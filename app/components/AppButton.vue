@@ -1,11 +1,12 @@
 <script setup lang="ts">
-defineProps<{ variant?: 'accent' | 'ghost'; size?: 'lg' | 'md'; icon?: string; disabled?: boolean }>()
+defineProps<{ variant?: 'accent' | 'ghost'; size?: 'lg' | 'md'; icon?: string; iconEnd?: string; disabled?: boolean }>()
 </script>
 
 <template>
   <button :class="['btn', variant ?? 'accent', size ?? 'lg']" :disabled="disabled">
     <Icon v-if="icon" :name="icon" class="ic" />
     <slot />
+    <Icon v-if="iconEnd" :name="iconEnd" class="ic" />
   </button>
 </template>
 
@@ -19,16 +20,13 @@ defineProps<{ variant?: 'accent' | 'ghost'; size?: 'lg' | 'md'; icon?: string; d
 .lg { min-height: 56px; }
 .md { min-height: 44px; font-size: 15px; }
 .accent { background: var(--accent); color: var(--accent-text); }
-.ghost { background: transparent; color: var(--text); border: 1px solid var(--glass-edge-flat); }
+.ghost {
+  color: var(--text);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(transparent, transparent) padding-box,
+    var(--edge-grad) border-box;
+}
 .btn:active:not(:disabled) { transform: scale(0.99); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .ghost {
-    border-color: transparent;
-    background:
-      linear-gradient(transparent, transparent) padding-box,
-      var(--glass-edge) border-box;
-  }
-}
 </style>
