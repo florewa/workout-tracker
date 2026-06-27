@@ -15,6 +15,8 @@ const { data: rows } = await useAsyncData(
   { server: false },
 )
 
+const infoOpen = ref(false)
+
 const startVal = (r: ProgressRow) => r.points[0]?.e1rm ?? 0
 const nowVal = (r: ProgressRow) => r.points[r.points.length - 1]?.e1rm ?? 0
 const delta = (r: ProgressRow) => Math.round((nowVal(r) - startVal(r)) * 10) / 10
@@ -50,8 +52,13 @@ function sparkPoints(r: ProgressRow): string {
 <template>
   <section class="page">
     <header class="head">
-      <h1 class="screen-title">Прогресс</h1>
-      <p class="subtitle">e1RM — оценка одноповторного максимума</p>
+      <div class="head-row">
+        <h1 class="screen-title">Прогресс</h1>
+        <button type="button" class="info-btn" aria-label="Что такое e1RM и PR" @click="infoOpen = true">
+          <Icon name="lucide:info" />
+        </button>
+      </div>
+      <p class="subtitle">Рост по упражнениям в e1RM</p>
     </header>
 
     <div v-if="rows && rows.length" class="cards">
@@ -91,6 +98,38 @@ function sparkPoints(r: ProgressRow): string {
       <Icon name="lucide:trending-up" class="empty-icon" aria-hidden="true" />
       <p class="empty-text">Запиши пару тренировок — здесь появится рост по упражнениям</p>
     </div>
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="infoOpen" class="modal-backdrop" @click.self="infoOpen = false">
+          <div class="modal glass">
+            <div class="modal-head">
+              <h2 class="modal-title">Обозначения</h2>
+              <button type="button" class="modal-close" aria-label="Закрыть" @click="infoOpen = false">
+                <Icon name="lucide:x" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="term">
+                <span class="term-name">e1RM</span>
+                <p class="term-desc">
+                  Оценочный разовый максимум (кг) — сколько ты поднял бы на один раз.
+                  Считается из рабочего подхода: <b>вес × (1 + повторы / 30)</b>.
+                  Например, 60 × 10 ≈ 80 кг. Удобно сравнивать прогресс, когда меняются
+                  и вес, и повторы. Это оценка — на больших повторах (12+) завышает.
+                </p>
+              </div>
+              <div class="term">
+                <span class="term-name">PR</span>
+                <p class="term-desc">
+                  Personal record — твой лучший e1RM за всё время по этому упражнению.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </section>
 </template>
 
@@ -104,6 +143,27 @@ function sparkPoints(r: ProgressRow): string {
 }
 
 .head { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.info-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+
+  &:active { color: var(--text); }
+}
 
 .screen-title {
   margin: 0;
@@ -206,4 +266,90 @@ function sparkPoints(r: ProgressRow): string {
 
 .empty-icon { font-size: 36px; color: var(--muted); opacity: 0.6; }
 .empty-text { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+/* Info modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.modal-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--text);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+
+  &:active { color: var(--text); }
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.term {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.term-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--accent);
+}
+
+.term-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+  b { color: var(--text); font-weight: 700; }
+}
+
+.modal-enter-active,
+.modal-leave-active { transition: opacity 0.2s ease; }
+.modal-enter-from,
+.modal-leave-to { opacity: 0; }
+.modal-enter-active .modal,
+.modal-leave-active .modal { transition: transform 0.2s ease; }
+.modal-enter-from .modal,
+.modal-leave-to .modal { transform: scale(0.95); }
 </style>
