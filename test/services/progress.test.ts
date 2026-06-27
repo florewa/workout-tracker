@@ -8,7 +8,7 @@ import { e1rm } from '~~/server/utils/metrics'
 beforeEach(async () => { await resetDb() })
 
 describe('exerciseProgress', () => {
-  it('берёт лучший подход первого дня против лучшего последнего', async () => {
+  it('строит ряд по дням: лучший e1RM и объём за день', async () => {
     const { danil, benchId } = await seedBaseline()
     const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
     const day1 = new Date('2026-06-01T10:00:00Z')
@@ -20,9 +20,12 @@ describe('exerciseProgress', () => {
     ])
     const prog = await exerciseProgress(testDb, danil)
     expect(prog).toHaveLength(1)
-    expect(prog[0].startE1rm).toBe(e1rm(60, 10))
-    expect(prog[0].nowE1rm).toBe(e1rm(70, 8))
     expect(prog[0].sessions).toBe(2)
+    expect(prog[0].points.map(p => p.date)).toEqual(['2026-06-01', '2026-06-10'])
+    expect(prog[0].points[0].e1rm).toBe(e1rm(60, 10))
+    expect(prog[0].points[1].e1rm).toBe(e1rm(70, 8))
+    expect(prog[0].best).toBe(e1rm(70, 8))
+    expect(prog[0].points[0].volume).toBe(850)
   })
 
   it('пустой результат без подходов', async () => {

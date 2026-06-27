@@ -1,9 +1,10 @@
 <script setup lang="ts">
+interface ProgressPoint { date: string; e1rm: number; volume: number }
 interface ProgressRow {
   exerciseId: number
   name: string
-  startE1rm: number
-  nowE1rm: number
+  points: ProgressPoint[]
+  best: number
   sessions: number
 }
 
@@ -14,15 +15,35 @@ const { data: rows } = await useAsyncData(
   { server: false },
 )
 
-function delta(r: ProgressRow): number {
-  return Math.round((r.nowE1rm - r.startE1rm) * 10) / 10
+const startVal = (r: ProgressRow) => r.points[0]?.e1rm ?? 0
+const nowVal = (r: ProgressRow) => r.points[r.points.length - 1]?.e1rm ?? 0
+const delta = (r: ProgressRow) => Math.round((nowVal(r) - startVal(r)) * 10) / 10
+const deltaPct = (r: ProgressRow) =>
+  startVal(r) > 0 ? Math.round(((nowVal(r) - startVal(r)) / startVal(r)) * 100) : 0
+const trend = (r: ProgressRow): 'up' | 'down' | 'flat' =>
+  delta(r) > 0 ? 'up' : delta(r) < 0 ? 'down' : 'flat'
+
+function lastDate(r: ProgressRow): string {
+  const d = r.points[r.points.length - 1]?.date
+  return d ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(d)) : ''
 }
-function deltaPct(r: ProgressRow): number {
-  return r.startE1rm > 0 ? Math.round(((r.nowE1rm - r.startE1rm) / r.startE1rm) * 100) : 0
-}
-function trend(r: ProgressRow): 'up' | 'down' | 'flat' {
-  const d = delta(r)
-  return d > 0 ? 'up' : d < 0 ? 'down' : 'flat'
+
+// Спарклайн: e1RM по сессиям, нормированный в 100×32
+function sparkPoints(r: ProgressRow): string {
+  const es = r.points.map(p => p.e1rm)
+  const n = es.length
+  if (n <= 1) return '0,16 100,16'
+  const min = Math.min(...es)
+  const max = Math.max(...es)
+  const span = max - min || 1
+  const pad = 4
+  return es
+    .map((e, i) => {
+      const x = (i / (n - 1)) * 100
+      const y = pad + (1 - (e - min) / span) * (32 - 2 * pad)
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
 }
 </script>
 
@@ -37,17 +58,13 @@ function trend(r: ProgressRow): 'up' | 'down' | 'flat' {
       <div v-for="r in rows" :key="r.exerciseId" class="card glass">
         <div class="card-top">
           <span class="ex-name">{{ r.name }}</span>
-          <span class="sessions">{{ r.sessions }} сесс.</span>
+          <span class="pr">PR {{ r.best }}</span>
         </div>
-        <div class="card-body">
-          <div class="metric">
-            <span class="metric-label">Старт</span>
-            <span class="metric-val">{{ r.startE1rm }}</span>
-          </div>
-          <Icon name="lucide:move-right" class="arrow" />
-          <div class="metric">
-            <span class="metric-label">Сейчас</span>
-            <span class="metric-val">{{ r.nowE1rm }}</span>
+
+        <div class="card-mid">
+          <div class="now">
+            <span class="now-val">{{ nowVal(r) }}</span>
+            <span class="now-unit">кг e1RM</span>
           </div>
           <span class="delta" :class="trend(r)">
             <Icon v-if="trend(r) === 'up'" name="lucide:trending-up" />
@@ -55,6 +72,17 @@ function trend(r: ProgressRow): 'up' | 'down' | 'flat' {
             <Icon v-else name="lucide:minus" />
             {{ delta(r) > 0 ? '+' : '' }}{{ delta(r) }} ({{ deltaPct(r) > 0 ? '+' : '' }}{{ deltaPct(r) }}%)
           </span>
+        </div>
+
+        <svg class="spark" :class="trend(r)" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true">
+          <polyline :points="sparkPoints(r)" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+        </svg>
+
+        <div class="substats">
+          <span>{{ r.sessions }} сесс.</span>
+          <span>старт {{ startVal(r) }} → {{ nowVal(r) }}</span>
+          <span>{{ lastDate(r) }}</span>
         </div>
       </div>
     </div>
@@ -108,54 +136,38 @@ function trend(r: ProgressRow): 'up' | 'down' | 'flat' {
   gap: var(--space-2);
 }
 
-.ex-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-}
+.ex-name { font-size: 16px; font-weight: 700; color: var(--text); }
 
-.sessions {
-  font-size: 12px;
-  color: var(--muted);
+.pr {
   flex-shrink: 0;
-}
-
-.card-body {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.metric {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.metric-label {
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--muted);
 }
 
-.metric-val {
+.card-mid {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.now { display: flex; align-items: baseline; gap: var(--space-2); }
+
+.now-val {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 26px;
+  font-size: 32px;
   color: var(--text);
+  line-height: 1;
 }
 
-.arrow {
-  font-size: 20px;
-  color: var(--muted);
-}
+.now-unit { font-size: 12px; color: var(--muted); }
 
 .delta {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  margin-left: auto;
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
@@ -163,6 +175,24 @@ function trend(r: ProgressRow): 'up' | 'down' | 'flat' {
   &.up { color: var(--pr); }
   &.down { color: var(--accent); }
   &.flat { color: var(--muted); }
+}
+
+.spark {
+  width: 100%;
+  height: 36px;
+  display: block;
+
+  &.up { color: var(--pr); }
+  &.down { color: var(--accent); }
+  &.flat { color: var(--muted); }
+}
+
+.substats {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .empty {

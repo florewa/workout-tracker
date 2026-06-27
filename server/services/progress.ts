@@ -1,15 +1,21 @@
 import { asc, eq } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import { sets, exercises } from '~~/server/db/schema'
-import { e1rm } from '~~/server/utils/metrics'
+import { e1rm, tonnage } from '~~/server/utils/metrics'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
+
+export interface ProgressPoint {
+  date: string
+  e1rm: number
+  volume: number
+}
 
 export interface ExerciseProgress {
   exerciseId: number
   name: string
-  startE1rm: number
-  nowE1rm: number
+  points: ProgressPoint[]
+  best: number
   sessions: number
 }
 
@@ -17,8 +23,8 @@ function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** e1RM «Старт → Сейчас» по каждому упражнению пользователя: лучший подход
- *  первого дня против лучшего подхода последнего дня. */
+/** Прогресс по каждому упражнению пользователя как временной ряд:
+ *  для каждого тренировочного дня — лучший e1RM и суммарный объём (тоннаж). */
 export async function exerciseProgress(executor: Executor, userId: number): Promise<ExerciseProgress[]> {
   const rows = await executor
     .select({
@@ -33,21 +39,29 @@ export async function exerciseProgress(executor: Executor, userId: number): Prom
     .where(eq(sets.userId, userId))
     .orderBy(asc(sets.createdAt), asc(sets.id))
 
-  const byExercise = new Map<number, { name: string; rows: typeof rows }>()
+  const byExercise = new Map<number, { name: string; days: Map<string, { e1rm: number; volume: number }> }>()
   for (const r of rows) {
-    let bucket = byExercise.get(r.exerciseId)
-    if (!bucket) { bucket = { name: r.name, rows: [] }; byExercise.set(r.exerciseId, bucket) }
-    bucket.rows.push(r)
+    let ex = byExercise.get(r.exerciseId)
+    if (!ex) { ex = { name: r.name, days: new Map() }; byExercise.set(r.exerciseId, ex) }
+    const key = dayKey(r.createdAt)
+    const day = ex.days.get(key) ?? { e1rm: 0, volume: 0 }
+    day.e1rm = Math.max(day.e1rm, e1rm(r.weight, r.reps))
+    day.volume = Math.round((day.volume + tonnage(r.weight, r.reps)) * 10) / 10
+    ex.days.set(key, day)
   }
 
   const result: ExerciseProgress[] = []
-  for (const [exerciseId, { name, rows: exRows }] of byExercise) {
-    const firstDay = dayKey(exRows[0].createdAt)
-    const lastDay = dayKey(exRows[exRows.length - 1].createdAt)
-    const bestOn = (day: string) =>
-      Math.max(...exRows.filter(r => dayKey(r.createdAt) === day).map(r => e1rm(r.weight, r.reps)))
-    const sessions = new Set(exRows.map(r => dayKey(r.createdAt))).size
-    result.push({ exerciseId, name, startE1rm: bestOn(firstDay), nowE1rm: bestOn(lastDay), sessions })
+  for (const [exerciseId, ex] of byExercise) {
+    const points = [...ex.days.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({ date, e1rm: v.e1rm, volume: v.volume }))
+    result.push({
+      exerciseId,
+      name: ex.name,
+      points,
+      best: Math.max(...points.map(p => p.e1rm)),
+      sessions: points.length,
+    })
   }
 
   return result.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
