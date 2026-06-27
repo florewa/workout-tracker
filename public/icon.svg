@@ -2,13 +2,13 @@
   <rect width="512" height="512" rx="112" fill="#14161a"/>
   <!-- Т -->
   <g fill="#f0ede4">
-    <rect x="110" y="156" width="180" height="46" rx="8"/>
-    <rect x="172" y="156" width="46" height="210" rx="8"/>
+    <rect x="110" y="150" width="180" height="44" rx="8"/>
+    <rect x="170" y="150" width="46" height="222" rx="8"/>
   </g>
-  <!-- П (оранжевая): зазор 28px и сверху, и сбоку -->
+  <!-- П (оранжевая): равный зазор 22px от низа перекладины Т и от тела Т -->
   <g fill="#ff5a1f">
-    <rect x="246" y="184" width="156" height="46" rx="8"/>
-    <rect x="246" y="184" width="46" height="182" rx="8"/>
-    <rect x="356" y="184" width="46" height="182" rx="8"/>
+    <rect x="238" y="216" width="160" height="44" rx="8"/>
+    <rect x="238" y="216" width="46" height="156" rx="8"/>
+    <rect x="352" y="216" width="46" height="156" rx="8"/>
   </g>
 </svg>
