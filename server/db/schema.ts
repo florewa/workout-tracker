@@ -9,14 +9,14 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 100 }).notNull(),
   username: varchar('username', { length: 100 }),
   inviteToken: varchar('invite_token', { length: 64 }).unique(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 // Дружба — взаимная, одна каноническая строка на пару (userLow < userHigh)
 export const friendships = pgTable('friendships', {
   userLow: integer('user_low').notNull().references(() => users.id),
   userHigh: integer('user_high').notNull().references(() => users.id),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.userLow, t.userHigh] }),
 }))
@@ -52,12 +52,12 @@ export const programExercises = pgTable('program_exercises', {
 
 export const workouts = pgTable('workouts', {
   id: serial('id').primaryKey(),
-  date: timestamp('date').notNull(),
+  date: timestamp('date', { withTimezone: true }).notNull(),
   createdBy: integer('created_by').references(() => users.id),
   dayId: integer('day_id').references(() => programDays.id),
   note: text('note'),
-  startedAt: timestamp('started_at'),
-  finishedAt: timestamp('finished_at'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
 }, (t) => ({
   dateIdx: index('workouts_date_idx').on(t.date),
 }))
@@ -78,7 +78,7 @@ export const sets = pgTable('sets', {
   weight: real('weight').notNull(),
   reps: integer('reps').notNull(),
   note: text('note'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userExerciseIdx: index('sets_user_exercise_idx').on(t.userId, t.exerciseId, t.createdAt),
 }))
