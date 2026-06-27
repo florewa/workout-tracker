@@ -1,0 +1,47 @@
+# Прод-стек «Твой Подход» — полностью изолирован.
+# БД без публикации порта (только внутри сети compose), приложение слушает только localhost.
+name: workout-tracker
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-workout}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-workout}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # порт НЕ публикуем — конфликта с чужим Postgres на хосте быть не может
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-workout} -d ${POSTGRES_DB:-workout}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    build:
+      context: .
+      target: tools
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    command: ["npx", "drizzle-kit", "migrate"]
+
+  app:
+    build:
+      context: .
+      target: runner
+    env_file: .env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # слушаем ТОЛЬКО localhost на отдельном порту — наружу не торчим, дефолтные порты не занимаем
+    ports:
+      - "127.0.0.1:${APP_PORT:-8793}:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
