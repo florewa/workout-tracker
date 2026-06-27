@@ -120,25 +120,27 @@ export async function cancelEmptyWorkout(executor: Executor, id: number): Promis
 export async function getWorkout(executor: Executor, id: number) {
   const [w] = await executor.select().from(workouts).where(eq(workouts.id, id)).limit(1)
   if (!w) return null
-  const members = await executor
-    .select({ id: users.id, name: users.name })
-    .from(workoutMembers)
-    .innerJoin(users, eq(workoutMembers.userId, users.id))
-    .where(eq(workoutMembers.workoutId, id))
-  const rows = await executor
-    .select({
-      id: sets.id,
-      userId: sets.userId,
-      exerciseId: sets.exerciseId,
-      exerciseName: exercises.name,
-      setOrder: sets.setOrder,
-      weight: sets.weight,
-      reps: sets.reps,
-      note: sets.note,
-    })
-    .from(sets)
-    .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
-    .where(eq(sets.workoutId, id))
-    .orderBy(sets.exerciseId, sets.setOrder)
+  const [members, rows] = await Promise.all([
+    executor
+      .select({ id: users.id, name: users.name })
+      .from(workoutMembers)
+      .innerJoin(users, eq(workoutMembers.userId, users.id))
+      .where(eq(workoutMembers.workoutId, id)),
+    executor
+      .select({
+        id: sets.id,
+        userId: sets.userId,
+        exerciseId: sets.exerciseId,
+        exerciseName: exercises.name,
+        setOrder: sets.setOrder,
+        weight: sets.weight,
+        reps: sets.reps,
+        note: sets.note,
+      })
+      .from(sets)
+      .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
+      .where(eq(sets.workoutId, id))
+      .orderBy(sets.exerciseId, sets.setOrder),
+  ])
   return { workout: { id: w.id, date: w.date, dayId: w.dayId, finishedAt: w.finishedAt }, members, sets: rows }
 }
