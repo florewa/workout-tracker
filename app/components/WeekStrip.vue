@@ -5,14 +5,6 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ select: [iso: string] }>()
 
-function localIso(d: Date): string {
-  return [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, '0'),
-    String(d.getDate()).padStart(2, '0'),
-  ].join('-')
-}
-
 const ABBREVS = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
 
 const weekDays = computed(() => {

@@ -15,19 +15,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [] }>()
 
-const PHOTO_MAP: Record<string, string> = {
-  'Верх A': '/programs/upper-a.jpg',
-  'Верх B': '/programs/upper-b.jpg',
-  'Низ A': '/programs/lower-a.jpg',
-  'Низ B': '/programs/lower-b.jpg',
-}
+const photoSrc = computed(() => programPhoto(props.day.code))
 
-const photoSrc = computed(() => PHOTO_MAP[props.day.code] ?? null)
-
-const muscles = computed(() => {
-  const m = props.day.title.match(/\(([^)]+)\)/)
-  return m ? m[1] : ''
-})
+const muscles = computed(() => dayFocus(props.day.title))
 
 const mins = computed(() => props.count * 10)
 </script>

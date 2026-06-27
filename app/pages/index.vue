@@ -44,25 +44,12 @@ const { data: days } = await useAsyncData(
   { server: false },
 )
 
-// Photo map: code → image path
-const PHOTO_MAP: Record<string, string> = {
-  'Верх A': '/programs/upper-a.jpg',
-  'Низ A':  '/programs/lower-a.jpg',
-  'Верх B': '/programs/upper-b.jpg',
-  'Низ B':  '/programs/lower-b.jpg',
-}
-
-function dayFocus(title: string): string {
-  const m = title.match(/\(([^)]+)\)/)
-  return m ? m[1].trim() : ''
-}
-
 const planned = computed<ProgramDay | null>(() =>
   days.value?.find(d => d.weekday === isoToday) ?? null,
 )
 
 const heroPhoto = computed<string | null>(() =>
-  planned.value ? (PHOTO_MAP[planned.value.code] ?? null) : null,
+  planned.value ? programPhoto(planned.value.code) : null,
 )
 
 // Exercise count for the planned day (state B)
