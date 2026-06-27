@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { createWorkout } from '~~/server/services/workouts'
-import { addSet, deleteSet, lastSet } from '~~/server/services/sets'
+import { addSet, deleteSet, lastSet, getSetOwnership } from '~~/server/services/sets'
 
 beforeEach(async () => { await resetDb() })
 
@@ -35,5 +35,13 @@ describe('sets', () => {
     const s = await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
     await deleteSet(testDb, s.id)
     expect(await lastSet(testDb, danil, benchId)).toBeNull()
+  })
+
+  it('getSetOwnership возвращает владельца подхода и null для несуществующего', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    const s = await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
+    expect(await getSetOwnership(testDb, s.id)).toEqual({ workoutId: wId, userId: danil })
+    expect(await getSetOwnership(testDb, 999999)).toBeNull()
   })
 })

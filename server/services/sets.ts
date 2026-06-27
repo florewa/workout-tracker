@@ -29,6 +29,18 @@ export async function addSet(
   return { id: row.id, setOrder }
 }
 
+export async function getSetOwnership(
+  executor: Executor,
+  id: number,
+): Promise<{ workoutId: number; userId: number } | null> {
+  const [row] = await executor
+    .select({ workoutId: sets.workoutId, userId: sets.userId })
+    .from(sets)
+    .where(eq(sets.id, id))
+    .limit(1)
+  return row ?? null
+}
+
 export async function deleteSet(executor: Executor, id: number): Promise<void> {
   await executor.delete(sets).where(eq(sets.id, id))
 }
