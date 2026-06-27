@@ -139,14 +139,41 @@ async function removeSet(setId: number) {
 
 // Finish → summary (already-finished workouts open straight into the summary)
 const finished = ref(Boolean(data.value?.workout.finishedAt))
+const justFinished = ref(false)
 const totalSets = computed(() => data.value?.sets.length ?? 0)
 const totalTonnage = computed(() => (data.value?.sets ?? []).reduce((acc, s) => acc + s.weight * s.reps, 0))
+const multiMember = computed(() => (data.value?.members.length ?? 0) > 1)
+
+function memberName(uid: number): string {
+  return data.value?.members.find(m => m.id === uid)?.name ?? ''
+}
+
+const summaryDate = computed(() =>
+  data.value
+    ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(data.value.workout.date))
+    : '',
+)
+
+// Подходы, сгруппированные по упражнению (внутри — по участнику и порядку)
+const summaryGroups = computed(() => {
+  const map = new Map<number, { exerciseId: number; name: string; sets: SetRow[] }>()
+  for (const s of data.value?.sets ?? []) {
+    let g = map.get(s.exerciseId)
+    if (!g) { g = { exerciseId: s.exerciseId, name: s.exerciseName, sets: [] }; map.set(s.exerciseId, g) }
+    g.sets.push(s)
+  }
+  return [...map.values()].map(g => ({
+    ...g,
+    sets: [...g.sets].sort((a, b) => a.userId - b.userId || a.setOrder - b.setOrder),
+  }))
+})
 
 async function finish() {
   if (busy.value) return
   busy.value = true
   try {
     await api.patch(`/api/workouts/${id}`)
+    justFinished.value = true
     finished.value = true
   } catch {
     alert('Не удалось завершить тренировку.')
@@ -176,9 +203,10 @@ async function cancel() {
 <template>
   <!-- ── Summary ── -->
   <section v-if="finished" class="page summary">
-    <div class="summary-mark"><Icon name="lucide:check" /></div>
-    <h1 class="screen-title">Готово</h1>
-    <p class="summary-sub">{{ dayTitle }}</p>
+    <div v-if="justFinished" class="summary-mark"><Icon name="lucide:check" /></div>
+    <h1 class="screen-title">{{ justFinished ? 'Готово' : dayTitle }}</h1>
+    <p class="summary-sub">{{ justFinished ? dayTitle : summaryDate }}</p>
+
     <div class="summary-stats glass">
       <div class="stat">
         <span class="stat-num">{{ totalSets }}</span>
@@ -189,6 +217,21 @@ async function cancel() {
         <span class="stat-label">кг тоннаж</span>
       </div>
     </div>
+
+    <div v-if="summaryGroups.length" class="detail">
+      <div v-for="g in summaryGroups" :key="g.exerciseId" class="detail-ex glass">
+        <div class="detail-head">
+          <span class="detail-name">{{ g.name }}</span>
+          <span class="detail-count">{{ g.sets.length }} подх.</span>
+        </div>
+        <div class="detail-sets">
+          <span v-for="s in g.sets" :key="s.id" class="detail-set">
+            <b>{{ s.weight }}</b><span class="mul">×</span>{{ s.reps }}<em v-if="multiMember"> · {{ memberName(s.userId) }}</em>
+          </span>
+        </div>
+      </div>
+    </div>
+
     <div class="cta">
       <AppButton icon-end="lucide:move-right" @click="navigateTo('/')">На главную</AppButton>
     </div>
@@ -615,6 +658,53 @@ async function cancel() {
 }
 
 .stat-label { font-size: 12px; color: var(--muted); }
+
+/* Per-exercise breakdown */
+.detail {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: left;
+  margin-top: var(--space-2);
+}
+
+.detail-ex {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+
+.detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.detail-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.detail-count { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+
+.detail-sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.detail-set {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 14px;
+  color: var(--text);
+
+  b { font-family: var(--font-display); font-weight: 800; }
+  .mul { color: var(--muted); margin: 0 2px; }
+  em { color: var(--muted); font-style: normal; font-size: 12px; }
+}
 
 .cta { width: 100%; margin-top: auto; }
 </style>
