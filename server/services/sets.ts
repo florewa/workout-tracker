@@ -8,25 +8,35 @@ export async function addSet(
   executor: Executor,
   input: { workoutId: number; userId: number; exerciseId: number; weight: number; reps: number; note?: string | null },
 ): Promise<{ id: number; setOrder: number }> {
-  const [{ maxOrder }] = await executor
-    .select({ maxOrder: sql<number>`coalesce(max(${sets.setOrder}), 0)`.mapWith(Number) })
-    .from(sets)
-    .where(and(
-      eq(sets.workoutId, input.workoutId),
-      eq(sets.userId, input.userId),
-      eq(sets.exerciseId, input.exerciseId),
-    ))
-  const setOrder = maxOrder + 1
-  const [row] = await executor.insert(sets).values({
-    workoutId: input.workoutId,
-    userId: input.userId,
-    exerciseId: input.exerciseId,
-    setOrder,
-    weight: input.weight,
-    reps: input.reps,
-    note: input.note ?? null,
-  }).returning({ id: sets.id })
-  return { id: row.id, setOrder }
+  // Гонка двух параллельных записей могла бы выдать одинаковый set_order.
+  // Защищает UNIQUE(workout_id, user_id, exercise_id, set_order) + retry с пересчётом.
+  for (let attempt = 0; ; attempt++) {
+    const [{ maxOrder }] = await executor
+      .select({ maxOrder: sql<number>`coalesce(max(${sets.setOrder}), 0)`.mapWith(Number) })
+      .from(sets)
+      .where(and(
+        eq(sets.workoutId, input.workoutId),
+        eq(sets.userId, input.userId),
+        eq(sets.exerciseId, input.exerciseId),
+      ))
+    const setOrder = maxOrder + 1
+    try {
+      const [row] = await executor.insert(sets).values({
+        workoutId: input.workoutId,
+        userId: input.userId,
+        exerciseId: input.exerciseId,
+        setOrder,
+        weight: input.weight,
+        reps: input.reps,
+        note: input.note ?? null,
+      }).returning({ id: sets.id })
+      return { id: row.id, setOrder }
+    } catch (e) {
+      // 23505 — нарушение UNIQUE: порядок уже занят параллельной вставкой, пробуем снова
+      if ((e as { code?: string }).code === '23505' && attempt < 5) continue
+      throw e
+    }
+  }
 }
 
 export async function getSetOwnership(

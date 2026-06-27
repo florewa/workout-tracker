@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "sets_order_unique" ON "sets" USING btree ("workout_id","user_id","exercise_id","set_order");

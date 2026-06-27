@@ -1,6 +1,6 @@
 import {
   pgTable, serial, integer, bigint, varchar, text, real,
-  timestamp, boolean, primaryKey, index, type AnyPgColumn,
+  timestamp, boolean, primaryKey, index, uniqueIndex, type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
@@ -81,4 +81,5 @@ export const sets = pgTable('sets', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userExerciseIdx: index('sets_user_exercise_idx').on(t.userId, t.exerciseId, t.createdAt),
+  orderUnique: uniqueIndex('sets_order_unique').on(t.workoutId, t.userId, t.exerciseId, t.setOrder),
 }))

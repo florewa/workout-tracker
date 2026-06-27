@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
+import { sets } from '~~/server/db/schema'
 import { createWorkout } from '~~/server/services/workouts'
 import { addSet, deleteSet, lastSet, getSetOwnership } from '~~/server/services/sets'
 
@@ -43,5 +44,14 @@ describe('sets', () => {
     const s = await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
     expect(await getSetOwnership(testDb, s.id)).toEqual({ workoutId: wId, userId: danil })
     expect(await getSetOwnership(testDb, 999999)).toBeNull()
+  })
+
+  it('UNIQUE не даёт задвоить set_order в паре юзер+упражнение', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
+    await expect(
+      testDb.insert(sets).values({ workoutId: wId, userId: danil, exerciseId: benchId, setOrder: 1, weight: 50, reps: 5 }),
+    ).rejects.toThrow()
   })
 })
