@@ -1,7 +1,7 @@
 import { createError, getRouterParam } from 'h3'
 import { db } from '~~/server/db/client'
 import { requireUser } from '~~/server/utils/auth'
-import { getWorkout, isWorkoutMember, countWorkoutSets, deleteWorkout } from '~~/server/services/workouts'
+import { getWorkout, isWorkoutMember, cancelEmptyWorkout } from '~~/server/services/workouts'
 
 export default defineEventHandler(async (event) => {
   const me = await requireUser(event)
@@ -13,10 +13,9 @@ export default defineEventHandler(async (event) => {
   if (!(await isWorkoutMember(db, id, me.id))) throw createError({ statusCode: 403, statusMessage: 'Нет доступа' })
 
   // Защита от потери данных: пустую можно отменить, с записанными подходами — нет
-  if (await countWorkoutSets(db, id) > 0) {
+  if (!(await cancelEmptyWorkout(db, id))) {
     throw createError({ statusCode: 409, statusMessage: 'В тренировке есть записанные подходы — её нельзя отменить' })
   }
 
-  await deleteWorkout(db, id)
   return { ok: true }
 })

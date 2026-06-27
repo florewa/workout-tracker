@@ -81,12 +81,27 @@ export async function finishWorkout(executor: Executor, id: number): Promise<voi
   await executor.update(workouts).set({ finishedAt: new Date() }).where(eq(workouts.id, id))
 }
 
-/** Удаляет тренировку с участниками (подходы должны быть удалены заранее — проверка в роуте) */
+/** Удаляет тренировку с участниками и подходами */
 export async function deleteWorkout(executor: Executor, id: number): Promise<void> {
   await executor.transaction(async (tx) => {
     await tx.delete(sets).where(eq(sets.workoutId, id))
     await tx.delete(workoutMembers).where(eq(workoutMembers.workoutId, id))
     await tx.delete(workouts).where(eq(workouts.id, id))
+  })
+}
+
+/**
+ * Отменяет тренировку, только если в ней нет записанных подходов.
+ * Счёт и удаление — в одной транзакции, чтобы параллельная запись подхода
+ * не была удалена в окне между проверкой и удалением. Возвращает false,
+ * если подходы есть (тренировка не тронута).
+ */
+export async function cancelEmptyWorkout(executor: Executor, id: number): Promise<boolean> {
+  return executor.transaction(async (tx) => {
+    if (await countWorkoutSets(tx, id) > 0) return false
+    await tx.delete(workoutMembers).where(eq(workoutMembers.workoutId, id))
+    await tx.delete(workouts).where(eq(workouts.id, id))
+    return true
   })
 }
 

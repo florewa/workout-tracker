@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { workouts, workoutMembers, sets } from '~~/server/db/schema'
 import {
-  createWorkout, isWorkoutMember, countWorkoutSets, finishWorkout, deleteWorkout,
+  createWorkout, isWorkoutMember, countWorkoutSets, finishWorkout, deleteWorkout, cancelEmptyWorkout,
 } from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
@@ -44,5 +44,22 @@ describe('deleteWorkout', () => {
     await deleteWorkout(testDb, id)
     expect(await testDb.select().from(workouts).where(eq(workouts.id, id))).toHaveLength(0)
     expect(await testDb.select().from(workoutMembers).where(eq(workoutMembers.workoutId, id))).toHaveLength(0)
+  })
+})
+
+describe('cancelEmptyWorkout', () => {
+  it('deletes an empty workout and returns true', async () => {
+    const { danil } = await seedBaseline()
+    const { id } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    expect(await cancelEmptyWorkout(testDb, id)).toBe(true)
+    expect(await testDb.select().from(workouts).where(eq(workouts.id, id))).toHaveLength(0)
+  })
+
+  it('keeps a workout that has sets and returns false', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const { id } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await testDb.insert(sets).values({ workoutId: id, userId: danil, exerciseId: benchId, setOrder: 1, weight: 60, reps: 5 })
+    expect(await cancelEmptyWorkout(testDb, id)).toBe(false)
+    expect(await testDb.select().from(workouts).where(eq(workouts.id, id))).toHaveLength(1)
   })
 })
