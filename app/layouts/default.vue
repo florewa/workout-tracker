@@ -39,9 +39,16 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-.app { display: flex; flex-direction: column; min-height: 100vh; }
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
 .content {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 16px;
   padding-top: max(16px, env(safe-area-inset-top));
   /* отступ под фиксированный таб-бар, чтобы контент не прятался за ним */

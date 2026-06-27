@@ -30,6 +30,7 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
       <h1 class="screen-title">История</h1>
     </header>
 
+    <div class="scroll">
     <div v-if="workouts && workouts.length" class="list glass">
       <button v-for="w in workouts" :key="w.id" type="button" class="row" @click="open(w.id)">
         <div class="row-main">
@@ -47,16 +48,29 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
       <Icon name="lucide:history" class="empty-icon" aria-hidden="true" />
       <p class="empty-text">Пока нет завершённых тренировок</p>
     </div>
+    </div>
   </section>
 </template>
 
 <style scoped lang="scss">
 .page {
+  height: 100%;
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  min-height: 100%;
+  overflow: hidden;
+}
+
+.head { flex-shrink: 0; }
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .screen-title {

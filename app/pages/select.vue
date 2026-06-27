@@ -111,6 +111,7 @@ function openWorkout(id: number) {
 
 <template>
   <section class="page">
+    <div class="top">
     <!-- Header -->
     <div class="header">
       <div class="header-text">
@@ -129,9 +130,9 @@ function openWorkout(id: number) {
       :workout-dates="workoutDatesSet"
       @select="selectedDate = $event"
     />
+    </div>
 
-    <!-- ── Conditional content ── -->
-
+    <div class="scroll">
     <!-- TODAY → program chooser -->
     <template v-if="selectedDate === todayIso">
       <div class="section-header">
@@ -187,12 +188,31 @@ function openWorkout(id: number) {
     <template v-else-if="selectedDate < todayIso">
       <p class="empty-day">В этот день тренировок не было</p>
     </template>
+    </div>
   </section>
 </template>
 
 <style scoped lang="scss">
 .page {
+  height: 100%;
   padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: hidden;
+}
+
+.top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);

@@ -61,6 +61,7 @@ function sparkPoints(r: ProgressRow): string {
       <p class="subtitle">Рост по упражнениям в e1RM</p>
     </header>
 
+    <div class="scroll">
     <div v-if="rows && rows.length" class="cards">
       <div v-for="r in rows" :key="r.exerciseId" class="card glass">
         <div class="card-top">
@@ -97,6 +98,7 @@ function sparkPoints(r: ProgressRow): string {
     <div v-else class="empty glass">
       <Icon name="lucide:trending-up" class="empty-icon" aria-hidden="true" />
       <p class="empty-text">Запиши пару тренировок — здесь появится рост по упражнениям</p>
+    </div>
     </div>
 
     <Teleport to="body">
@@ -135,14 +137,24 @@ function sparkPoints(r: ProgressRow): string {
 
 <style scoped lang="scss">
 .page {
+  height: 100%;
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  min-height: 100%;
+  overflow: hidden;
 }
 
-.head { display: flex; flex-direction: column; gap: var(--space-1); }
+.head { display: flex; flex-direction: column; gap: var(--space-1); flex-shrink: 0; }
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
 
 .head-row {
   display: flex;
