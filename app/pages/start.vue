@@ -12,20 +12,6 @@ const selectedCount = computed(() => session.selectedMemberIds.length)
 
 function isChecked(id: number) { return session.selectedMemberIds.includes(id) }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  const first = parts[0]?.charAt(0) ?? ''
-  const second = parts.length > 1 ? parts[parts.length - 1].charAt(0) : ''
-  return (first + second).toUpperCase()
-}
-
-// Deterministic accent-leaning gradient per person, so each avatar reads distinct
-function avatarStyle(name: string) {
-  let h = 0
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360
-  return { background: `linear-gradient(135deg, hsl(${h} 64% 52%), hsl(${(h + 38) % 360} 66% 44%))` }
-}
-
 async function go() {
   try {
     const body: { dayId: number | null; memberIds: number[]; date?: string } = {
@@ -60,7 +46,7 @@ async function go() {
         <span class="check" aria-hidden="true">
           <Icon name="lucide:check" class="check-icon" />
         </span>
-        <span class="avatar" :style="avatarStyle(u.name)">{{ initials(u.name) }}</span>
+        <span class="avatar" :style="avatarGradient(u.name)">{{ nameInitials(u.name) }}</span>
         <span class="name">{{ u.name }}</span>
       </button>
     </div>

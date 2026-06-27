@@ -4,7 +4,7 @@ const tabs = [
   { to: '/', label: 'Тренировка', icon: 'lucide:dumbbell', match: ['/', '/start', '/workout'] },
   { to: '/progress', label: 'Прогресс', icon: 'lucide:trending-up' },
   { to: '/history', label: 'История', icon: 'lucide:history' },
-  { to: '/settings', label: 'Настройки', icon: 'lucide:settings' },
+  { to: '/settings', label: 'Профиль', icon: 'lucide:user' },
 ]
 function isActive(t: { to: string; match?: string[] }): boolean {
   const paths = t.match ?? [t.to]

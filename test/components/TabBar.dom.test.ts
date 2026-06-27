@@ -16,6 +16,6 @@ describe('TabBar', () => {
     const links = wrapper.findAllComponents(RouterLinkStub)
     expect(links).toHaveLength(4)
     expect(wrapper.text()).toContain('Тренировка')
-    expect(wrapper.text()).toContain('Настройки')
+    expect(wrapper.text()).toContain('Профиль')
   })
 })
