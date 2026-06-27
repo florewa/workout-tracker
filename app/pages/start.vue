@@ -4,9 +4,18 @@ const api = useApi()
 const session = useSessionStore()
 const route = useRoute()
 
-const { data: users } = await useAsyncData('users', () => api.get<UserLite[]>('/api/users'), { server: false })
+const { data: friends } = await useAsyncData('friends', () => api.get<UserLite[]>('/api/friends'), { server: false })
 const dayId = computed(() => (route.query.dayId ? Number(route.query.dayId) : null))
 const dateParam = computed(() => route.query.date as string | undefined)
+
+onMounted(async () => { if (!session.currentUser) { try { await session.loadMe() } catch { /* no-op */ } } })
+
+// Я + мои друзья
+const people = computed<UserLite[]>(() => {
+  const self = session.currentUser
+  const list = friends.value ?? []
+  return self ? [self, ...list.filter(f => f.id !== self.id)] : list
+})
 
 const selectedCount = computed(() => session.selectedMemberIds.length)
 
@@ -36,7 +45,7 @@ async function go() {
 
     <div class="grid">
       <button
-        v-for="u in users"
+        v-for="u in people"
         :key="u.id"
         type="button"
         class="tile glass"
@@ -50,6 +59,11 @@ async function go() {
         <span class="name">{{ u.name }}</span>
       </button>
     </div>
+
+    <button v-if="people.length <= 1" type="button" class="add-friends" @click="navigateTo('/settings')">
+      <Icon name="lucide:user-plus" />
+      Добавь друзей, чтобы тренироваться вместе
+    </button>
 
     <div class="cta">
       <AppButton icon-end="lucide:move-right" :disabled="!selectedCount" @click="go">
@@ -166,6 +180,21 @@ async function go() {
 .tile.selected .check {
   opacity: 1;
   transform: scale(1);
+}
+
+.add-friends {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 0;
+  background: none;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+
+  &:active { color: var(--text); }
 }
 
 .cta {

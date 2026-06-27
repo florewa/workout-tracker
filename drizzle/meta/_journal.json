@@ -22,6 +22,13 @@
       "when": 1782478781282,
       "tag": "0002_perfect_maelstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782576769017,
+      "tag": "0003_stiff_madame_hydra",
+      "breakpoints": true
     }
   ]
 }

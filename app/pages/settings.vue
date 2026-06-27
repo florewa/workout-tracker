@@ -1,12 +1,55 @@
 <script setup lang="ts">
+interface UserLite { id: number; name: string }
+
 const theme = useThemeStore()
 const session = useSessionStore()
+const api = useApi()
 
 const themeOptions = [
   { value: 'system', label: 'Система', icon: 'lucide:monitor' },
   { value: 'light', label: 'Светлая', icon: 'lucide:sun' },
   { value: 'dark', label: 'Тёмная', icon: 'lucide:moon' },
 ] as const
+
+const { data: friends, refresh: refreshFriends } = await useAsyncData(
+  'friends-settings',
+  () => api.get<UserLite[]>('/api/friends'),
+  { server: false },
+)
+
+const inviting = ref(false)
+
+async function invite() {
+  if (inviting.value) return
+  inviting.value = true
+  try {
+    const { link } = await api.get<{ token: string; link: string }>('/api/friends/invite')
+    if (!link) { alert('Ссылка пока недоступна'); return }
+    const tg = (window as unknown as { Telegram?: { WebApp?: { openTelegramLink?: (u: string) => void } } }).Telegram?.WebApp
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Тренируйся со мной')}`)
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(link)
+      alert('Ссылка-приглашение скопирована')
+    } else {
+      prompt('Ссылка-приглашение:', link)
+    }
+  } catch {
+    alert('Не удалось создать приглашение')
+  } finally {
+    inviting.value = false
+  }
+}
+
+async function removeFriend(id: number) {
+  if (!confirm('Удалить из друзей?')) return
+  try {
+    await api.del(`/api/friends/${id}`)
+    await refreshFriends()
+  } catch {
+    alert('Не удалось удалить')
+  }
+}
 </script>
 
 <template>
@@ -23,6 +66,28 @@ const themeOptions = [
         <p class="profile-name">{{ session.currentUser.name }}</p>
         <p class="profile-sub">В зале</p>
       </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <h2 class="block-title">Друзья</h2>
+        <button type="button" class="invite-btn" :disabled="inviting" @click="invite">
+          <Icon name="lucide:user-plus" />
+          Пригласить
+        </button>
+      </div>
+      <div v-if="friends && friends.length" class="friends glass">
+        <div v-for="f in friends" :key="f.id" class="friend-row">
+          <span class="friend-avatar" :style="avatarGradient(f.name)">{{ nameInitials(f.name) }}</span>
+          <span class="friend-name">{{ f.name }}</span>
+          <button type="button" class="friend-del" @click="removeFriend(f.id)">
+            <Icon name="lucide:x" />
+          </button>
+        </div>
+      </div>
+      <p v-else class="friends-empty">
+        Пока никого. Пригласи друга по ссылке — и сможете тренироваться вместе.
+      </p>
     </div>
 
     <div class="block">
@@ -109,6 +174,85 @@ const themeOptions = [
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Friends */
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.invite-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.friends {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+
+  &:not(:last-child) { border-bottom: 1px solid var(--glass-edge-flat); }
+}
+
+.friend-avatar {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  color: #fff;
+}
+
+.friend-name {
+  flex: 1;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.friend-del {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  cursor: pointer;
+
+  &:active { color: var(--text); }
+}
+
+.friends-empty {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--muted);
 }
 

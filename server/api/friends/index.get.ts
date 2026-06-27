@@ -1,8 +1,8 @@
 import { db } from '~~/server/db/client'
 import { requireUser } from '~~/server/utils/auth'
-import { listUsers } from '~~/server/services/users'
+import { listFriends } from '~~/server/services/friends'
 
 export default defineEventHandler(async (event) => {
-  await requireUser(event)
-  return listUsers(db)
+  const me = await requireUser(event)
+  return listFriends(db, me.id)
 })

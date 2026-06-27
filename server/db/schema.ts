@@ -8,8 +8,18 @@ export const users = pgTable('users', {
   telegramId: bigint('telegram_id', { mode: 'number' }).unique(),
   name: varchar('name', { length: 100 }).notNull(),
   username: varchar('username', { length: 100 }),
+  inviteToken: varchar('invite_token', { length: 64 }).unique(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
+
+// Дружба — взаимная, одна каноническая строка на пару (userLow < userHigh)
+export const friendships = pgTable('friendships', {
+  userLow: integer('user_low').notNull().references(() => users.id),
+  userHigh: integer('user_high').notNull().references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userLow, t.userHigh] }),
+}))
 
 export const exercises = pgTable('exercises', {
   id: serial('id').primaryKey(),
