@@ -1,4 +1,5 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, sql } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import type { db as dbType } from '~~/server/db/client'
 import { sets, exercises } from '~~/server/db/schema'
 import { e1rm, tonnage } from '~~/server/utils/metrics'
@@ -26,16 +27,20 @@ function dayKey(d: Date): string {
 /** Прогресс по каждому упражнению пользователя как временной ряд:
  *  для каждого тренировочного дня — лучший e1RM и суммарный объём (тоннаж). */
 export async function exerciseProgress(executor: Executor, userId: number): Promise<ExerciseProgress[]> {
+  // Подходы могли писаться под дубль упражнения (alias_of → канон) —
+  // сводим к каноническому упражнению, чтобы прогресс не двоился.
+  const canon = alias(exercises, 'canon')
   const rows = await executor
     .select({
-      exerciseId: sets.exerciseId,
-      name: exercises.name,
+      exerciseId: canon.id,
+      name: canon.name,
       weight: sets.weight,
       reps: sets.reps,
       createdAt: sets.createdAt,
     })
     .from(sets)
     .innerJoin(exercises, eq(exercises.id, sets.exerciseId))
+    .innerJoin(canon, eq(canon.id, sql`coalesce(${exercises.aliasOf}, ${exercises.id})`))
     .where(eq(sets.userId, userId))
     .orderBy(asc(sets.createdAt), asc(sets.id))
 
