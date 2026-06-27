@@ -60,6 +60,36 @@ export async function getActiveWorkout(
   return row ?? null
 }
 
+export async function isWorkoutMember(executor: Executor, workoutId: number, userId: number): Promise<boolean> {
+  const [row] = await executor
+    .select({ userId: workoutMembers.userId })
+    .from(workoutMembers)
+    .where(and(eq(workoutMembers.workoutId, workoutId), eq(workoutMembers.userId, userId)))
+    .limit(1)
+  return Boolean(row)
+}
+
+export async function countWorkoutSets(executor: Executor, workoutId: number): Promise<number> {
+  const [row] = await executor
+    .select({ n: sql<number>`count(*)`.mapWith(Number) })
+    .from(sets)
+    .where(eq(sets.workoutId, workoutId))
+  return row?.n ?? 0
+}
+
+export async function finishWorkout(executor: Executor, id: number): Promise<void> {
+  await executor.update(workouts).set({ finishedAt: new Date() }).where(eq(workouts.id, id))
+}
+
+/** Удаляет тренировку с участниками (подходы должны быть удалены заранее — проверка в роуте) */
+export async function deleteWorkout(executor: Executor, id: number): Promise<void> {
+  await executor.transaction(async (tx) => {
+    await tx.delete(sets).where(eq(sets.workoutId, id))
+    await tx.delete(workoutMembers).where(eq(workoutMembers.workoutId, id))
+    await tx.delete(workouts).where(eq(workouts.id, id))
+  })
+}
+
 export async function getWorkout(executor: Executor, id: number) {
   const [w] = await executor.select().from(workouts).where(eq(workouts.id, id)).limit(1)
   if (!w) return null
