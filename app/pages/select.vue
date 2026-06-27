@@ -168,7 +168,7 @@ function openWorkout(id: number) {
         <h2 class="h2 section-title">Тренировка {{ formatDateLabel(selectedDate) }}</h2>
       </div>
 
-      <div class="workout-list">
+      <div class="workout-list glass">
         <button
           v-for="w in selectedDayWorkouts"
           :key="w.id"
@@ -285,8 +285,8 @@ function openWorkout(id: number) {
 .skeleton-card {
   height: 122px;
   border-radius: var(--radius-lg);
-  background: var(--surface);
-  border: 1px solid var(--divider);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge-flat);
 
   @media (prefers-reduced-motion: no-preference) {
     animation: pulse 1.4s ease-in-out infinite;
@@ -300,9 +300,6 @@ function openWorkout(id: number) {
 
 /* ── Past-day workout list ── */
 .workout-list {
-  background: var(--surface);
-  border: 1px solid var(--divider);
-  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -314,7 +311,7 @@ function openWorkout(id: number) {
   min-height: 56px;
   padding: var(--space-2) var(--space-4);
   border: none;
-  border-bottom: 1px solid var(--divider);
+  border-bottom: 1px solid var(--glass-edge-flat);
   background: transparent;
   cursor: pointer;
   color: var(--text);

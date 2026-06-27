@@ -18,6 +18,23 @@
   --accent-text: #14161a;
   --pr: #3ddc84;
   --divider: #272b33;
+
+  /* Glass surfaces */
+  --glass-bg: rgba(30, 33, 39, 0.55);
+  --glass-blur: 16px;
+  --glass-edge: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.24),
+    rgba(255, 255, 255, 0.05) 38%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  --glass-edge-flat: rgba(255, 255, 255, 0.10);
+  --glass-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+
+  /* Ambient backdrop — gives the blur something to pick up */
+  --bg-glow:
+    radial-gradient(130% 70% at 50% -15%, rgba(255, 90, 31, 0.12), transparent 55%),
+    radial-gradient(90% 60% at 100% 100%, rgba(90, 120, 255, 0.06), transparent 60%);
 }
 
 [data-theme='light'] {
@@ -31,4 +48,20 @@
   --accent-text: #ffffff;
   --pr: #18a957;
   --divider: #e5e5e1;
+
+  /* Glass surfaces */
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-blur: 16px;
+  --glass-edge: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.10),
+    rgba(0, 0, 0, 0.03) 40%,
+    rgba(0, 0, 0, 0) 70%
+  );
+  --glass-edge-flat: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 28px rgba(0, 0, 0, 0.10);
+
+  /* Ambient backdrop — gives the blur something to pick up */
+  --bg-glow:
+    radial-gradient(130% 70% at 50% -15%, rgba(255, 90, 31, 0.07), transparent 55%);
 }

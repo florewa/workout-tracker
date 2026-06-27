@@ -87,10 +87,7 @@ const state = computed<'planned' | 'rest'>(() => {
   return 'rest'
 })
 
-const stateHeading = computed(() => {
-  if (state.value === 'planned') return 'Сегодня по плану'
-  return 'Сегодня по плану отдых'
-})
+const stateHeading = 'Сегодня по плану'
 
 function startWorkout() {
   if (planned.value) {
@@ -151,11 +148,13 @@ function goSelect() {
     <template v-else>
       <h1 class="section-heading">{{ stateHeading }}</h1>
 
-      <div class="rest">
-        <div class="rest-icon-wrap" aria-hidden="true">
-          <Icon name="lucide:moon" class="rest-icon" />
+      <div class="rest-hero">
+        <Icon name="lucide:moon" class="rest-moon" aria-hidden="true" />
+        <div class="rest-content">
+          <h2 class="rest-title">Отдых</h2>
+          <p class="rest-focus">День восстановления</p>
+          <p class="rest-hint">Можно выбрать тренировку вручную</p>
         </div>
-        <p class="rest-sub">Можно выбрать тренировку вручную</p>
       </div>
 
       <div class="ctas">
@@ -281,39 +280,76 @@ function goSelect() {
   line-height: 1;
 }
 
-/* ── Rest day card ── */
-.rest {
+/* ── Rest day card — mirrors the planned hero shape ── */
+.rest-hero {
+  position: relative;
+  min-height: 260px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: var(--space-8) var(--space-4);
-  gap: var(--space-3);
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--divider);
+  justify-content: flex-end;
+  padding: var(--space-5);
+  background: linear-gradient(160deg, var(--surface-2) 0%, var(--surface) 100%);
+  border: 1px solid var(--glass-edge-flat);
+  box-shadow: var(--glass-shadow);
 }
 
-.rest-icon-wrap {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--surface-2);
-  display: grid;
-  place-items: center;
+/* Gradient glass edge where supported */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rest-hero {
+    border-color: transparent;
+    background:
+      linear-gradient(160deg, var(--surface-2) 0%, var(--surface) 100%) padding-box,
+      var(--glass-edge) border-box;
+  }
 }
 
-.rest-icon {
-  font-size: 28px;
+/* Large decorative moon bleeding off the top-right corner */
+.rest-moon {
+  position: absolute;
+  top: -28px;
+  right: -18px;
+  font-size: 190px;
   color: var(--muted);
+  opacity: 0.13;
+  pointer-events: none;
 }
 
-.rest-sub {
+.rest-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rest-title {
   margin: 0;
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(34px, 11vw, 46px);
+  line-height: 1;
+  color: var(--text);
+}
+
+.rest-focus {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
   color: var(--muted);
-  line-height: 1.5;
+}
+
+.rest-hint {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.8;
+  line-height: 1;
 }
 
 /* ── CTAs ── */

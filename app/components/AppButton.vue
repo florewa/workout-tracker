@@ -19,7 +19,16 @@ defineProps<{ variant?: 'accent' | 'ghost'; size?: 'lg' | 'md'; icon?: string; d
 .lg { min-height: 56px; }
 .md { min-height: 44px; font-size: 15px; }
 .accent { background: var(--accent); color: var(--accent-text); }
-.ghost { background: transparent; color: var(--text); border: 1px solid var(--divider); }
+.ghost { background: transparent; color: var(--text); border: 1px solid var(--glass-edge-flat); }
 .btn:active:not(:disabled) { transform: scale(0.99); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ghost {
+    border-color: transparent;
+    background:
+      linear-gradient(transparent, transparent) padding-box,
+      var(--glass-edge) border-box;
+  }
+}
 </style>

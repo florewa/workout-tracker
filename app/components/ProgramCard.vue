@@ -33,7 +33,7 @@ const mins = computed(() => props.count * 10)
 </script>
 
 <template>
-  <div class="card" :class="{ 'card--featured': featured }">
+  <div class="card glass" :class="{ 'card--featured': featured }">
     <!-- Photo thumbnail -->
     <div class="thumb">
       <template v-if="photoSrc">
@@ -74,20 +74,16 @@ const mins = computed(() => props.count * 10)
 
 <style scoped lang="scss">
 .card {
-  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--divider);
-  border-left: 1px solid var(--divider);
-  border-radius: var(--radius-lg);
   padding: var(--space-3);
   overflow: hidden;
 
+  /* Accent left bar for the scheduled day — drawn as an inset edge so it
+     survives the glass gradient border */
   &--featured {
-    border-left: 4px solid var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 35%, var(--divider));
+    box-shadow: inset 4px 0 0 var(--accent), var(--glass-shadow);
   }
 }
 

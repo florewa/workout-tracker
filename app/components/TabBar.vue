@@ -31,9 +31,26 @@ function isActive(t: { to: string; match?: string[] }): boolean {
   bottom: 0;
   z-index: 50;
   display: flex;
-  border-top: 1px solid var(--divider);
+  border-top: 1px solid var(--glass-edge-flat);
   background: var(--surface);
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar {
+    /* Fading hairline — brighter in the middle, transparent at the edges */
+    border-top: 1px solid transparent;
+    border-image: linear-gradient(
+      90deg,
+      transparent,
+      var(--glass-edge-flat) 20%,
+      var(--glass-edge-flat) 80%,
+      transparent
+    ) 1;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  }
 }
 .tab {
   flex: 1;
