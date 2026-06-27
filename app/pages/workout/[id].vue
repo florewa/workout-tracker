@@ -6,7 +6,7 @@ interface SetRow {
   setOrder: number; weight: number; reps: number; note: string | null
 }
 interface WorkoutData {
-  workout: { id: number; date: string; dayId: number | null }
+  workout: { id: number; date: string; dayId: number | null; finishedAt: string | null }
   members: MemberLite[]
   sets: SetRow[]
 }
@@ -137,8 +137,8 @@ async function removeSet(setId: number) {
   }
 }
 
-// Finish → summary
-const finished = ref(false)
+// Finish → summary (already-finished workouts open straight into the summary)
+const finished = ref(Boolean(data.value?.workout.finishedAt))
 const totalSets = computed(() => data.value?.sets.length ?? 0)
 const totalTonnage = computed(() => (data.value?.sets ?? []).reduce((acc, s) => acc + s.weight * s.reps, 0))
 

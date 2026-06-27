@@ -1,7 +1,7 @@
-import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import {
-  workouts, workoutMembers, sets, users, exercises,
+  workouts, workoutMembers, sets, users, exercises, programDays,
 } from '~~/server/db/schema'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
@@ -27,17 +27,29 @@ export async function createWorkout(
   })
 }
 
-export async function listWorkouts(executor: Executor, opts: { limit?: number } = {}) {
+export async function listWorkouts(executor: Executor, opts: { limit?: number; memberId?: number } = {}) {
+  const own = opts.memberId
+    ? inArray(
+        workouts.id,
+        executor.select({ wid: workoutMembers.workoutId }).from(workoutMembers).where(eq(workoutMembers.userId, opts.memberId)),
+      )
+    : undefined
   return executor
     .select({
       id: workouts.id,
       date: workouts.date,
       dayId: workouts.dayId,
-      memberCount: sql<number>`count(${workoutMembers.userId})`.mapWith(Number),
+      dayCode: programDays.code,
+      finishedAt: workouts.finishedAt,
+      memberCount: sql<number>`count(distinct ${workoutMembers.userId})`.mapWith(Number),
+      setCount: sql<number>`count(distinct ${sets.id})`.mapWith(Number),
     })
     .from(workouts)
     .leftJoin(workoutMembers, eq(workoutMembers.workoutId, workouts.id))
-    .groupBy(workouts.id)
+    .leftJoin(sets, eq(sets.workoutId, workouts.id))
+    .leftJoin(programDays, eq(programDays.id, workouts.dayId))
+    .where(own)
+    .groupBy(workouts.id, programDays.code)
     .orderBy(desc(workouts.date))
     .limit(opts.limit ?? 50)
 }
@@ -128,5 +140,5 @@ export async function getWorkout(executor: Executor, id: number) {
     .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
     .where(eq(sets.workoutId, id))
     .orderBy(sets.exerciseId, sets.setOrder)
-  return { workout: { id: w.id, date: w.date, dayId: w.dayId }, members, sets: rows }
+  return { workout: { id: w.id, date: w.date, dayId: w.dayId, finishedAt: w.finishedAt }, members, sets: rows }
 }

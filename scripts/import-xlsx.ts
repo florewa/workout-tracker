@@ -102,7 +102,7 @@ async function main() {
     if (existing.length) continue
 
     await db.transaction(async (tx) => {
-      const workoutIns = await tx.insert(workouts).values({ date }).returning({ id: workouts.id })
+      const workoutIns = await tx.insert(workouts).values({ date, startedAt: date, finishedAt: date }).returning({ id: workouts.id })
       const workoutId = workoutIns[0].id
 
       const members = new Set<number>()
