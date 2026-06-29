@@ -105,6 +105,8 @@ function openWorkout(id: number) {
 }
 
 function openBank() { navigateTo('/exercises') }
+function openNewProgram() { navigateTo('/program/new') }
+function editProgram(id: number) { navigateTo('/program/' + id) }
 </script>
 
 <template>
@@ -135,7 +137,7 @@ function openBank() { navigateTo('/exercises') }
     <template v-if="selectedDate === todayIso">
       <div class="section-header">
         <h2 class="h2 section-title">Мои программы</h2>
-        <span class="section-action" title="Скоро — редактор программ">＋ Новая программа</span>
+        <button type="button" class="section-action" @click="openNewProgram">＋ Новая программа</button>
       </div>
 
       <div v-if="status === 'pending'" class="skeleton-list" aria-busy="true">
@@ -150,6 +152,7 @@ function openBank() { navigateTo('/exercises') }
           :count="countMap[day.code] ?? 0"
           :featured="isFeatured(day)"
           @select="selectDay(day)"
+          @edit="editProgram(day.id)"
         />
       </div>
     </template>
@@ -286,10 +289,14 @@ function openBank() { navigateTo('/exercises') }
 }
 
 .section-action {
+  border: 0;
+  background: none;
+  padding: var(--space-1) var(--space-2);
   font-size: 13px;
-  color: var(--muted);
-  cursor: default;
-  user-select: none;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  &:active { opacity: 0.7; }
 }
 
 /* ── Program cards ── */

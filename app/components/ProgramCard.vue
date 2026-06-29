@@ -13,7 +13,7 @@ const props = defineProps<{
   featured: boolean
 }>()
 
-const emit = defineEmits<{ select: [] }>()
+const emit = defineEmits<{ select: []; edit: [] }>()
 
 const photoSrc = computed(() => programPhoto(props.day.code))
 
@@ -24,6 +24,9 @@ const mins = computed(() => props.count * 10)
 
 <template>
   <div class="card glass" :class="{ 'card--featured': featured }">
+    <button type="button" class="edit-btn" aria-label="Редактировать программу" @click.stop="emit('edit')">
+      <Icon name="lucide:pencil" />
+    </button>
     <!-- Photo thumbnail -->
     <div class="thumb">
       <template v-if="photoSrc">
@@ -64,6 +67,7 @@ const mins = computed(() => props.count * 10)
 
 <style scoped lang="scss">
 .card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -160,5 +164,23 @@ const mins = computed(() => props.count * 10)
 
 .btn-wrap {
   margin-top: var(--space-2);
+}
+
+.edit-btn {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  cursor: pointer;
+  &:active { color: var(--text); }
 }
 </style>
