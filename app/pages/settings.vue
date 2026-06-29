@@ -42,6 +42,24 @@ async function invite() {
   }
 }
 
+const remindersOn = ref(true)
+onMounted(async () => {
+  try {
+    const me = await api.get<{ remindersEnabled: boolean }>('/api/me')
+    remindersOn.value = me.remindersEnabled
+  } catch { /* оставим дефолт */ }
+})
+async function toggleReminders() {
+  const next = !remindersOn.value
+  remindersOn.value = next
+  try {
+    await api.patch('/api/me/reminders', { enabled: next })
+  } catch {
+    remindersOn.value = !next
+    toast('Не удалось сохранить', 'error')
+  }
+}
+
 async function removeFriend(id: number) {
   const ok = await confirm({
     title: 'Удалить из друзей?',
@@ -95,6 +113,26 @@ async function removeFriend(id: number) {
       <p v-else class="friends-empty">
         Пока никого. Пригласи друга по ссылке — и сможете тренироваться вместе.
       </p>
+    </div>
+
+    <div class="block">
+      <h2 class="block-title">Уведомления</h2>
+      <div class="row glass">
+        <div class="row-text">
+          <span class="row-title">Напоминания о тренировке</span>
+          <span class="row-sub">Бот напомнит в дни по программе</span>
+        </div>
+        <button
+          type="button"
+          class="switch"
+          :class="{ on: remindersOn }"
+          role="switch"
+          :aria-checked="remindersOn"
+          @click="toggleReminders"
+        >
+          <span class="knob" />
+        </button>
+      </div>
     </div>
 
     <div class="block">
@@ -173,6 +211,50 @@ async function removeFriend(id: number) {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* Toggle row */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+.row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.row-sub { font-size: 12px; color: var(--muted); }
+
+.switch {
+  flex-shrink: 0;
+  width: 48px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  padding: 3px;
+  cursor: pointer;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: background 0.18s ease;
+  }
+
+  &.on { background: var(--accent); }
+}
+
+.knob {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: transform 0.18s ease;
+  }
+
+  .switch.on & { transform: translateX(20px); }
 }
 
 .block-title {

@@ -50,6 +50,13 @@
       "when": 1782732124871,
       "tag": "0006_dapper_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782738970293,
+      "tag": "0007_gorgeous_talkback",
+      "breakpoints": true
     }
   ]
 }
