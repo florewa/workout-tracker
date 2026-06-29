@@ -276,9 +276,8 @@ async function addCategory() {
               </div>
             </div>
 
-            <div class="sheet-actions">
-              <AppButton v-if="!detail.source" icon="lucide:pencil" variant="ghost" @click="editFromDetail">Редактировать</AppButton>
-              <p v-else class="builtin-note"><Icon name="lucide:lock" /> Встроенное упражнение — недоступно для правки</p>
+            <div v-if="!detail.source" class="sheet-actions">
+              <AppButton icon="lucide:pencil" variant="ghost" @click="editFromDetail">Редактировать</AppButton>
             </div>
           </div>
         </div>
@@ -567,15 +566,6 @@ async function addCategory() {
   cursor: pointer;
 }
 
-.builtin-note {
-  margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-  font-size: 13px;
-  color: var(--muted);
-}
 
 .chips.muscles { margin-top: calc(-1 * var(--space-1)); }
 
