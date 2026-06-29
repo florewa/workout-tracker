@@ -9,8 +9,8 @@ beforeEach(async () => { await resetDb() })
 describe('reminders', () => {
   it('в рассылку попадают только подписанные с telegram_id', async () => {
     const { danil, egor } = await seedBaseline()
-    await testDb.update(users).set({ telegramId: 111 }).where(eq(users.id, danil))
-    await testDb.update(users).set({ telegramId: 222 }).where(eq(users.id, egor))
+    await testDb.update(users).set({ telegramId: 111, remindersEnabled: true }).where(eq(users.id, danil))
+    await testDb.update(users).set({ telegramId: 222, remindersEnabled: true }).where(eq(users.id, egor))
 
     await setReminders(testDb, egor, false) // Егор отписался
 
@@ -20,7 +20,7 @@ describe('reminders', () => {
   })
 
   it('текст содержит план дня и упражнения', async () => {
-    const text = buildReminderText({ code: 'A', title: 'Верх A', exercises: ['Жим', 'Тяга', 'Присед', 'Бицепс'] }, 0)
+    const text = buildReminderText({ code: 'Верх A', title: 'День 1', exercises: ['Жим', 'Тяга', 'Присед', 'Бицепс'] }, 0)
     expect(text).toContain('Верх A')
     expect(text).toContain('Жим')
     expect(text).toContain('и не только')

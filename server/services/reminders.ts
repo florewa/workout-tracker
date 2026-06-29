@@ -56,7 +56,7 @@ export function buildReminderText(plan: DayPlan, seed: number): string {
   const line = LINES[((seed % LINES.length) + LINES.length) % LINES.length]
   const head = plan.exercises.slice(0, 3).join(', ')
   const tail = plan.exercises.length > 3 ? ' и не только' : ''
-  const planLine = head ? `\n\nСегодня по плану <b>${plan.title}</b>: ${head}${tail}.` : `\n\nСегодня по плану <b>${plan.title}</b>.`
+  const planLine = head ? `\n\nСегодня по плану <b>${plan.code}</b>: ${head}${tail}.` : `\n\nСегодня по плану <b>${plan.code}</b>.`
   return `💪 Не забудь про тренировку!${planLine}\n\n${line}`
 }
 

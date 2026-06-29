@@ -9,8 +9,8 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 100 }).notNull(),
   username: varchar('username', { length: 100 }),
   inviteToken: varchar('invite_token', { length: 64 }).unique(),
-  // Напоминания о тренировке в боте (можно отключить в профиле)
-  remindersEnabled: boolean('reminders_enabled').notNull().default(true),
+  // Напоминания о тренировке в боте (по умолчанию выкл.; включается в профиле)
+  remindersEnabled: boolean('reminders_enabled').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
