@@ -12,12 +12,12 @@ export async function addMember(executor: Executor, workoutId: number, userId: n
 
 export async function createWorkout(
   executor: Executor,
-  input: { createdBy: number; dayId?: number | null; memberIds: number[]; date?: Date },
+  input: { createdBy: number; dayId?: number | null; memberIds: number[]; date?: Date; recordMode?: 'each' | 'single' },
 ): Promise<{ id: number }> {
   // executor.transaction корректно работает и на db, и на вложенной tx (savepoint)
   return executor.transaction(async (tx) => {
     const [w] = await tx.insert(workouts)
-      .values({ date: input.date ?? new Date(), createdBy: input.createdBy, dayId: input.dayId ?? null, startedAt: new Date() })
+      .values({ date: input.date ?? new Date(), createdBy: input.createdBy, dayId: input.dayId ?? null, startedAt: new Date(), recordMode: input.recordMode ?? 'each' })
       .returning({ id: workouts.id })
     const ids = new Set<number>([input.createdBy, ...input.memberIds])
     for (const userId of ids) {
@@ -135,6 +135,7 @@ export async function getWorkout(executor: Executor, id: number) {
         setOrder: sets.setOrder,
         weight: sets.weight,
         reps: sets.reps,
+        skipped: sets.skipped,
         note: sets.note,
       })
       .from(sets)
@@ -142,5 +143,5 @@ export async function getWorkout(executor: Executor, id: number) {
       .where(eq(sets.workoutId, id))
       .orderBy(sets.exerciseId, sets.setOrder),
   ])
-  return { workout: { id: w.id, date: w.date, dayId: w.dayId, finishedAt: w.finishedAt }, members, sets: rows }
+  return { workout: { id: w.id, date: w.date, dayId: w.dayId, finishedAt: w.finishedAt, recordMode: w.recordMode }, members, sets: rows }
 }
