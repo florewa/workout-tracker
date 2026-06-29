@@ -17,8 +17,7 @@ const { data: workouts } = await useAsyncData(
 )
 
 function dateLabel(iso: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
-    .format(new Date(iso))
+  return dateWithWeekday(iso, { year: true })
 }
 
 function open(id: number) { navigateTo(`/workout/${id}`) }

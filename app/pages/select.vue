@@ -23,9 +23,7 @@ const selectedDate = ref(todayIso)
 
 // Header date recomputes when selectedDate changes; parse at noon to avoid UTC-offset day flip
 const headerDate = computed(() =>
-  new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(
-    new Date(selectedDate.value + 'T12:00:00'),
-  ),
+  dateWithWeekday(new Date(selectedDate.value + 'T12:00:00')),
 )
 
 // Fetch all data in one shot
@@ -94,9 +92,7 @@ function isFeatured(day: ProgramDay): boolean {
 
 // Format a date string for display
 function formatDateLabel(isoDate: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(
-    new Date(isoDate + 'T12:00:00'),
-  )
+  return dateWithWeekday(new Date(isoDate + 'T12:00:00'))
 }
 
 function selectDay(day: ProgramDay) {
