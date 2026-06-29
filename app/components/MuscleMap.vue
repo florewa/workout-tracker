@@ -34,8 +34,8 @@ const secondarySlugs = computed(() => slugs(props.secondary))
 
 function fill(slug: string): string {
   if (primarySlugs.value.has(slug)) return 'var(--accent)'
-  if (secondarySlugs.value.has(slug)) return 'color-mix(in srgb, var(--accent) 45%, var(--surface-2))'
-  return 'var(--surface-2)'
+  if (secondarySlugs.value.has(slug)) return 'color-mix(in srgb, var(--accent) 55%, #e9edf3)'
+  return '#e9edf3'
 }
 </script>
 
@@ -70,7 +70,7 @@ function fill(slug: string): string {
   height: auto;
 }
 .parts path {
-  stroke: color-mix(in srgb, var(--text) 16%, transparent);
+  stroke: rgba(20, 24, 33, 0.35);
   stroke-width: 1.4;
   stroke-linejoin: round;
 }
