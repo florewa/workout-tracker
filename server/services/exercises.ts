@@ -66,6 +66,7 @@ export async function getExercise(executor: Executor, id: number) {
       secondaryMuscles: exercises.secondaryMuscles,
       equipment: exercises.equipment,
       instructions: exercises.instructions,
+      source: exercises.source,
       categoryId: exercises.categoryId,
       categoryName: categories.name,
       imageUrl: exercises.imageUrl,
@@ -75,6 +76,12 @@ export async function getExercise(executor: Executor, id: number) {
     .where(eq(exercises.id, id))
     .limit(1)
   return row ?? null
+}
+
+// Встроенные (импортированные) упражнения редактировать нельзя — только свои
+export async function exerciseSource(executor: Executor, id: number): Promise<string | null | undefined> {
+  const [row] = await executor.select({ source: exercises.source }).from(exercises).where(eq(exercises.id, id)).limit(1)
+  return row ? row.source : undefined
 }
 
 export async function createExercise(

@@ -41,7 +41,7 @@ const visible = computed(() => filtered.value.slice(0, limit.value))
 interface ExerciseDetail {
   id: number; name: string; nameEn: string | null; muscleGroup: string | null
   primaryMuscles: string[] | null; secondaryMuscles: string[] | null
-  equipment: string | null; instructions: string | null
+  equipment: string | null; instructions: string | null; source: string | null
   categoryId: number | null; categoryName: string | null; imageUrl: string | null
 }
 const detail = ref<ExerciseDetail | null>(null)
@@ -154,18 +154,6 @@ async function addCategory() {
     toast('Не удалось добавить категорию', 'error')
   }
 }
-async function deleteCategory(id: number) {
-  const ok = await confirm({ title: 'Удалить категорию?', message: 'Упражнения останутся, но без категории.', confirmText: 'Удалить', danger: true })
-  if (!ok) return
-  try {
-    await api.del(`/api/categories/${id}`)
-    if (activeCategory.value === id) activeCategory.value = null
-    await refreshCategories()
-    await refreshExercises()
-  } catch {
-    toast('Не удалось удалить', 'error')
-  }
-}
 </script>
 
 <template>
@@ -193,7 +181,6 @@ async function deleteCategory(id: number) {
       </div>
       <div v-for="c in categories" :key="c.id" class="cat-row">
         <span>{{ c.name }}</span>
-        <button type="button" class="cat-del" @click="deleteCategory(c.id)"><Icon name="lucide:x" /></button>
       </div>
     </div>
 
@@ -290,7 +277,8 @@ async function deleteCategory(id: number) {
             </div>
 
             <div class="sheet-actions">
-              <AppButton icon="lucide:pencil" variant="ghost" @click="editFromDetail">Редактировать</AppButton>
+              <AppButton v-if="!detail.source" icon="lucide:pencil" variant="ghost" @click="editFromDetail">Редактировать</AppButton>
+              <p v-else class="builtin-note"><Icon name="lucide:lock" /> Встроенное упражнение — недоступно для правки</p>
             </div>
           </div>
         </div>
@@ -577,6 +565,16 @@ async function deleteCategory(id: number) {
   font-weight: 600;
   padding: var(--space-2);
   cursor: pointer;
+}
+
+.builtin-note {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .chips.muscles { margin-top: calc(-1 * var(--space-1)); }

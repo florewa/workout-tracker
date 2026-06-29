@@ -133,6 +133,16 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
     </div>
 
     <div class="scroll">
+    <!-- Банк упражнений — крупный вход -->
+    <button type="button" class="bank-entry" @click="openBank">
+      <span class="bank-icon" aria-hidden="true"><Icon name="lucide:library-big" /></span>
+      <span class="bank-text">
+        <span class="bank-title">Банк упражнений</span>
+        <span class="bank-sub">900+ упражнений с фото и мышцами · создавай свои</span>
+      </span>
+      <Icon name="lucide:arrow-right" class="bank-chevron" aria-hidden="true" />
+    </button>
+
     <!-- TODAY → program chooser -->
     <template v-if="selectedDate === todayIso">
       <div class="section-header">
@@ -190,15 +200,6 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
       <p class="empty-day">В этот день тренировок не было</p>
     </template>
 
-    <!-- Банк упражнений -->
-    <button type="button" class="bank-entry glass" @click="openBank">
-      <span class="bank-icon" aria-hidden="true"><Icon name="lucide:library" /></span>
-      <span class="bank-text">
-        <span class="bank-title">Банк упражнений</span>
-        <span class="bank-sub">Создавай, ищи, добавляй фото</span>
-      </span>
-      <Icon name="lucide:chevron-right" class="bank-chevron" aria-hidden="true" />
-    </button>
     </div>
   </section>
 </template>
@@ -423,24 +424,30 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
   text-align: left;
   cursor: pointer;
-  color: var(--text);
+  color: var(--accent-text);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #ff5d8f));
+  box-shadow: var(--glass-shadow);
+
+  &:active { transform: scale(0.99); }
 }
 .bank-icon {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--accent-text);
   display: grid;
   place-items: center;
-  font-size: 22px;
+  font-size: 26px;
   flex-shrink: 0;
 }
-.bank-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.bank-title { font-size: 15px; font-weight: 700; }
-.bank-sub { font-size: 12px; color: var(--muted); }
-.bank-chevron { font-size: 20px; color: var(--muted); flex-shrink: 0; }
+.bank-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.bank-title { font-family: var(--font-display); font-size: 17px; font-weight: 800; }
+.bank-sub { font-size: 12px; opacity: 0.85; line-height: 1.3; }
+.bank-chevron { font-size: 22px; flex-shrink: 0; }
 </style>

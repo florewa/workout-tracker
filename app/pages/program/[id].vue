@@ -1,6 +1,6 @@
 <script setup lang="ts">
 interface PE { peId: number; id: number; name: string; imageUrl: string | null; targetSets: number | null; targetReps: string | null }
-interface BankItem { id: number; name: string; nameEn: string | null; muscleGroup: string | null; categoryName: string | null; imageUrl: string | null }
+interface BankItem { id: number; name: string; nameEn: string | null; muscleGroup: string | null; primaryMuscles: string[] | null; categoryName: string | null; imageUrl: string | null }
 
 const route = useRoute()
 const api = useApi()
@@ -101,12 +101,19 @@ async function removeDay() {
 // ── Подбор из банка ──
 const picking = ref(false)
 const bankSearch = ref('')
+const pickMuscle = ref<string | null>(null)
 const { data: bank } = await useAsyncData('prog-bank', () => api.get<BankItem[]>('/api/exercises', { full: 1 }), { server: false })
 const bankFiltered = computed(() => {
   const q = bankSearch.value.trim().toLowerCase()
-  const list = bank.value ?? []
-  return (q ? list.filter(e => e.name.toLowerCase().includes(q) || (e.nameEn ?? '').toLowerCase().includes(q)) : list).slice(0, 80)
+  return (bank.value ?? []).filter(e =>
+    (pickMuscle.value == null || (e.primaryMuscles ?? []).includes(pickMuscle.value))
+    && (!q || e.name.toLowerCase().includes(q) || (e.nameEn ?? '').toLowerCase().includes(q)),
+  )
 })
+const PICK_PAGE = 50
+const pickLimit = ref(PICK_PAGE)
+watch([bankSearch, pickMuscle, picking], () => { pickLimit.value = PICK_PAGE })
+const pickVisible = computed(() => bankFiltered.value.slice(0, pickLimit.value))
 
 async function addExercise(ex: BankItem) {
   const id = await ensureDay()
@@ -193,9 +200,20 @@ async function addExercise(ex: BankItem) {
               <h2 class="sheet-title">Добавить упражнение</h2>
               <button type="button" class="icon-btn" @click="picking = false"><Icon name="lucide:x" /></button>
             </div>
-            <input v-model="bankSearch" type="search" class="field-input" placeholder="Поиск" />
+            <input v-model="bankSearch" type="search" class="field-input pick-search" placeholder="Поиск упражнения" />
+            <div class="pick-chips">
+              <button type="button" class="pchip" :class="{ active: pickMuscle === null }" @click="pickMuscle = null">Все</button>
+              <button
+                v-for="m in FILTER_MUSCLES"
+                :key="m"
+                type="button"
+                class="pchip"
+                :class="{ active: pickMuscle === m }"
+                @click="pickMuscle = pickMuscle === m ? null : m"
+              >{{ muscleRu(m) }}</button>
+            </div>
             <div class="pick-list">
-              <button v-for="e in bankFiltered" :key="e.id" type="button" class="pick-row" @click="addExercise(e)">
+              <button v-for="e in pickVisible" :key="e.id" type="button" class="pick-row" @click="addExercise(e)">
                 <div class="pick-thumb">
                   <img v-if="e.imageUrl" :src="e.imageUrl" :alt="e.name" loading="lazy" />
                   <Icon v-else name="lucide:dumbbell" />
@@ -206,6 +224,10 @@ async function addExercise(ex: BankItem) {
                 </div>
                 <Icon name="lucide:plus" class="pick-add" />
               </button>
+              <button v-if="bankFiltered.length > pickLimit" type="button" class="pick-more" @click="pickLimit += PICK_PAGE">
+                Показать ещё ({{ bankFiltered.length - pickLimit }})
+              </button>
+              <p v-if="!bankFiltered.length" class="pick-empty">Ничего не найдено</p>
             </div>
           </div>
         </div>
@@ -246,11 +268,14 @@ async function addExercise(ex: BankItem) {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .field-input {
+  width: 100%;
+  box-sizing: border-box;
   height: 44px; padding: 0 var(--space-3);
   border: 1px solid var(--glass-edge-flat); border-radius: var(--radius-md);
   background: var(--surface-2); color: var(--text); font-size: 15px;
   &:focus { outline: none; border-color: var(--accent); }
 }
+.pick-search { flex-shrink: 0; }
 .hint { font-size: 12px; color: var(--muted); }
 
 .wd { display: flex; gap: 6px; }
@@ -308,6 +333,17 @@ async function addExercise(ex: BankItem) {
 }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--text); }
+.pick-chips {
+  display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; flex-shrink: 0;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+.pchip {
+  flex-shrink: 0; min-height: 32px; padding: 0 var(--space-3);
+  border: 1px solid var(--glass-edge-flat); border-radius: 999px;
+  background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  &.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+}
 .pick-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .pick-row {
   display: flex; align-items: center; gap: var(--space-3); padding: 6px;
@@ -322,6 +358,14 @@ async function addExercise(ex: BankItem) {
 .pick-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .pick-sub { font-size: 12px; color: var(--muted); }
 .pick-add { color: var(--accent); flex-shrink: 0; }
+.pick-more {
+  margin-top: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-edge-flat); border-radius: var(--radius-md);
+  background: var(--surface-2); color: var(--text);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.pick-empty { text-align: center; color: var(--muted); font-size: 14px; padding: var(--space-4) 0; }
 
 .sheet-enter-active, .sheet-leave-active { transition: opacity 0.2s ease; }
 .sheet-enter-from, .sheet-leave-to { opacity: 0; }

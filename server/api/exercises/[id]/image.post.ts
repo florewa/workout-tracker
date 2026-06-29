@@ -1,7 +1,7 @@
 import { createError, getRouterParam, readMultipartFormData } from 'h3'
 import { db } from '~~/server/db/client'
 import { requireUser } from '~~/server/utils/auth'
-import { setExerciseImage } from '~~/server/services/exercises'
+import { setExerciseImage, exerciseSource } from '~~/server/services/exercises'
 import { saveImage, isAllowedImageType } from '~~/server/utils/uploads'
 
 const MAX_BYTES = 5 * 1024 * 1024
@@ -10,6 +10,9 @@ export default defineEventHandler(async (event) => {
   await requireUser(event)
   const id = Number(getRouterParam(event, 'id'))
   if (!Number.isInteger(id) || id <= 0) throw createError({ statusCode: 400, statusMessage: 'Неверный id' })
+  const src = await exerciseSource(db, id)
+  if (src === undefined) throw createError({ statusCode: 404, statusMessage: 'Не найдено' })
+  if (src) throw createError({ statusCode: 403, statusMessage: 'Встроенное упражнение нельзя изменять' })
 
   const form = await readMultipartFormData(event)
   const file = form?.find(f => f.name === 'image' && f.filename)
