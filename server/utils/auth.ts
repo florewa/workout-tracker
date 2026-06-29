@@ -5,7 +5,9 @@ import { users } from '~~/server/db/schema'
 import { validateInitData } from '~~/server/utils/telegram'
 import { resolveUser, isAllowed, parseAllowlist } from '~~/server/services/users'
 
-export async function requireUser(event: H3Event): Promise<{ id: number; name: string }> {
+// Авторизация по сырому initData. Используется и в HTTP (requireUser),
+// и в WebSocket-хендлере, где нет H3Event с заголовками.
+export async function authenticateInitData(initData: string): Promise<{ id: number; name: string }> {
   // Dev-обход (только не в production)
   const devId = process.env.AUTH_DEV_USER_ID
   if (devId && process.env.NODE_ENV !== 'production') {
@@ -14,8 +16,6 @@ export async function requireUser(event: H3Event): Promise<{ id: number; name: s
     return { id: u.id, name: u.name }
   }
 
-  const header = getHeader(event, 'authorization') ?? ''
-  const initData = header.startsWith('tma ') ? header.slice(4) : ''
   if (!initData) throw createError({ statusCode: 401, statusMessage: 'Нет авторизации' })
 
   const token = process.env.BOT_TOKEN
@@ -33,4 +33,10 @@ export async function requireUser(event: H3Event): Promise<{ id: number; name: s
   }
 
   return resolveUser(db, tg)
+}
+
+export async function requireUser(event: H3Event): Promise<{ id: number; name: string }> {
+  const header = getHeader(event, 'authorization') ?? ''
+  const initData = header.startsWith('tma ') ? header.slice(4) : ''
+  return authenticateInitData(initData)
 }
