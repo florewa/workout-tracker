@@ -4,6 +4,7 @@ interface UserLite { id: number; name: string }
 const theme = useThemeStore()
 const session = useSessionStore()
 const api = useApi()
+const { toast, confirm } = useDialog()
 
 const themeOptions = [
   { value: 'system', label: 'Система', icon: 'lucide:monitor' },
@@ -24,30 +25,36 @@ async function invite() {
   inviting.value = true
   try {
     const { link } = await api.get<{ token: string; link: string }>('/api/friends/invite')
-    if (!link) { alert('Ссылка пока недоступна'); return }
+    if (!link) { toast('Ссылка пока недоступна', 'error'); return }
     const tg = (window as unknown as { Telegram?: { WebApp?: { openTelegramLink?: (u: string) => void } } }).Telegram?.WebApp
     if (tg?.openTelegramLink) {
       tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Тренируйся со мной')}`)
     } else if (navigator.clipboard) {
       await navigator.clipboard.writeText(link)
-      alert('Ссылка-приглашение скопирована')
+      toast('Ссылка-приглашение скопирована', 'success')
     } else {
-      prompt('Ссылка-приглашение:', link)
+      toast(`Ссылка-приглашение: ${link}`, 'info')
     }
   } catch {
-    alert('Не удалось создать приглашение')
+    toast('Не удалось создать приглашение', 'error')
   } finally {
     inviting.value = false
   }
 }
 
 async function removeFriend(id: number) {
-  if (!confirm('Удалить из друзей?')) return
+  const ok = await confirm({
+    title: 'Удалить из друзей?',
+    message: 'Вы перестанете видеть друг друга в участниках и соревновании.',
+    confirmText: 'Удалить',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await api.del(`/api/friends/${id}`)
     await refreshFriends()
   } catch {
-    alert('Не удалось удалить')
+    toast('Не удалось удалить', 'error')
   }
 }
 </script>

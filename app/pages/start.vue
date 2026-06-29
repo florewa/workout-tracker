@@ -3,6 +3,7 @@ interface UserLite { id: number; name: string }
 const api = useApi()
 const session = useSessionStore()
 const route = useRoute()
+const { toast } = useDialog()
 
 const { data: friends } = await useAsyncData('friends', () => api.get<UserLite[]>('/api/friends'), { server: false })
 const dayId = computed(() => (route.query.dayId ? Number(route.query.dayId) : null))
@@ -37,7 +38,7 @@ async function go() {
     const { id } = await api.post<{ id: number }>('/api/workouts', body)
     navigateTo(`/workout/${id}`)
   } catch {
-    alert('Не удалось создать тренировку. Попробуй ещё раз.')
+    toast('Не удалось создать тренировку. Попробуй ещё раз.', 'error')
   }
 }
 </script>

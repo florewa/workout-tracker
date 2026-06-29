@@ -16,6 +16,7 @@ interface DayDetail { day: { id: number; code: string; title: string }; exercise
 const route = useRoute()
 const api = useApi()
 const session = useSessionStore()
+const { toast, confirm } = useDialog()
 const id = Number(route.params.id)
 
 const { data, refresh } = await useAsyncData(
@@ -224,7 +225,7 @@ async function record() {
     await refresh()
     if (!wasComplete) advance(exId)
   } catch {
-    alert('Не удалось записать подход.')
+    toast('Не удалось записать подход.', 'error')
   } finally {
     busy.value = false
   }
@@ -241,7 +242,7 @@ async function skip() {
     await refresh()
     advance(exId)
   } catch {
-    alert('Не удалось пропустить подход.')
+    toast('Не удалось пропустить подход.', 'error')
   } finally {
     busy.value = false
   }
@@ -252,7 +253,7 @@ async function removeSet(setId: number) {
     await api.del(`/api/sets/${setId}`)
     await refresh()
   } catch {
-    alert('Не удалось удалить подход.')
+    toast('Не удалось удалить подход.', 'error')
   }
 }
 
@@ -261,7 +262,7 @@ async function onEditSet({ id: setId, weight: w, reps: r }: { id: number; weight
     await api.patch(`/api/sets/${setId}`, { weight: w, reps: r })
     await refresh()
   } catch {
-    alert('Не удалось изменить подход.')
+    toast('Не удалось изменить подход.', 'error')
   }
 }
 
@@ -270,7 +271,7 @@ async function onReorder(ids: number[]) {
     await api.patch('/api/sets/reorder', { ids })
     await refresh()
   } catch {
-    alert('Не удалось изменить порядок.')
+    toast('Не удалось изменить порядок.', 'error')
     await refresh()
   }
 }
@@ -313,7 +314,7 @@ async function finish() {
     justFinished.value = true
     finished.value = true
   } catch {
-    alert('Не удалось завершить тренировку.')
+    toast('Не удалось завершить тренировку.', 'error')
     busy.value = false
   }
 }
@@ -345,13 +346,20 @@ const hasSets = computed(() => totalSets.value > 0)
 
 async function cancel() {
   if (busy.value) return
-  if (!confirm('Отменить тренировку? Она будет удалена.')) return
+  const ok = await confirm({
+    title: 'Отменить тренировку?',
+    message: 'Тренировка будет удалена. Это действие нельзя отменить.',
+    confirmText: 'Удалить',
+    cancelText: 'Назад',
+    danger: true,
+  })
+  if (!ok) return
   busy.value = true
   try {
     await api.del(`/api/workouts/${id}`)
     navigateTo('/select')
   } catch (e) {
-    alert((e as { statusMessage?: string })?.statusMessage ?? 'Не удалось отменить тренировку.')
+    toast((e as { statusMessage?: string })?.statusMessage ?? 'Не удалось отменить тренировку.', 'error')
     busy.value = false
     refresh()
   }
