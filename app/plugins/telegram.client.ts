@@ -16,4 +16,15 @@ export default defineNuxtPlugin(() => {
   }
   useState<string>('tgInitData', () => '').value = initData
   useState<string>('tgStartParam', () => '').value = startParam
+
+  // Telegram перехватывает вертикальный свайп и сворачивает приложение —
+  // это ломает drag-and-drop подходов. Отключаем (Bot API 7.7+).
+  try {
+    const wa = (window as unknown as {
+      Telegram?: { WebApp?: { ready?: () => void; expand?: () => void; disableVerticalSwipes?: () => void } }
+    }).Telegram?.WebApp
+    wa?.ready?.()
+    wa?.expand?.()
+    wa?.disableVerticalSwipes?.()
+  } catch { /* вне Telegram — no-op */ }
 })
