@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import { categories, exercises } from '~~/server/db/schema'
 
@@ -20,10 +20,14 @@ export async function updateCategory(executor: Executor, id: number, name: strin
   await executor.update(categories).set({ name }).where(eq(categories.id, id))
 }
 
-// Удаляет категорию, открепляя от неё упражнения (упражнения остаются)
-export async function deleteCategory(executor: Executor, id: number): Promise<void> {
-  await executor.transaction(async (tx) => {
-    await tx.update(exercises).set({ categoryId: null }).where(eq(exercises.categoryId, id))
-    await tx.delete(categories).where(eq(categories.id, id))
-  })
+// Удаляет только пустую категорию (без упражнений) — защищает встроенные.
+// Возвращает false, если в категории есть упражнения.
+export async function deleteCategory(executor: Executor, id: number): Promise<boolean> {
+  const [{ n }] = await executor
+    .select({ n: sql<number>`count(*)`.mapWith(Number) })
+    .from(exercises)
+    .where(eq(exercises.categoryId, id))
+  if (n > 0) return false
+  await executor.delete(categories).where(eq(categories.id, id))
+  return true
 }

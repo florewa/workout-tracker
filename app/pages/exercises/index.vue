@@ -154,6 +154,20 @@ async function addCategory() {
     toast('Не удалось добавить категорию', 'error')
   }
 }
+
+// категории, в которых есть упражнения — их удалять нельзя (защита встроенных)
+const usedCategoryIds = computed(() => new Set((exercises.value ?? []).map(e => e.categoryId).filter(Boolean)))
+async function deleteCategory(id: number) {
+  const ok = await confirm({ title: 'Удалить категорию?', message: 'Пустая категория будет удалена.', confirmText: 'Удалить', danger: true })
+  if (!ok) return
+  try {
+    await api.del(`/api/categories/${id}`)
+    if (activeCategory.value === id) activeCategory.value = null
+    await refreshCategories()
+  } catch {
+    toast('Не удалось удалить категорию', 'error')
+  }
+}
 </script>
 
 <template>
@@ -181,6 +195,7 @@ async function addCategory() {
       </div>
       <div v-for="c in categories" :key="c.id" class="cat-row">
         <span>{{ c.name }}</span>
+        <button v-if="!usedCategoryIds.has(c.id)" type="button" class="cat-del" aria-label="Удалить категорию" @click="deleteCategory(c.id)"><Icon name="lucide:x" /></button>
       </div>
     </div>
 
@@ -432,7 +447,8 @@ async function addCategory() {
   min-height: 0;
   overflow-y: auto;
   margin: 0 calc(-1 * var(--space-4));
-  padding: 0 var(--space-4) var(--space-4);
+  /* нижний отступ под плавающую кнопку «+», чтобы последняя карточка была видна */
+  padding: 0 var(--space-4) calc(72px + var(--space-4));
 }
 
 .grid {

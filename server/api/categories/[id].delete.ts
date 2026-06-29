@@ -7,6 +7,7 @@ export default defineEventHandler(async (event) => {
   await requireUser(event)
   const id = Number(getRouterParam(event, 'id'))
   if (!Number.isInteger(id) || id <= 0) throw createError({ statusCode: 400, statusMessage: 'Неверный id' })
-  await deleteCategory(db, id)
+  const ok = await deleteCategory(db, id)
+  if (!ok) throw createError({ statusCode: 409, statusMessage: 'В категории есть упражнения' })
   return { ok: true }
 })

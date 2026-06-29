@@ -44,7 +44,7 @@ onMounted(async () => {
   /* горизонтальные отступы задаёт сама страница — иначе они складываются вдвое,
      а overflow контента режет box-shadow карточек */
   padding-top: env(safe-area-inset-top);
-  /* отступ под фиксированный таб-бар, чтобы контент не прятался за ним */
-  padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  /* ровно высота таб-бара — без лишнего резерва, контент доходит до конца */
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
 }
 </style>
