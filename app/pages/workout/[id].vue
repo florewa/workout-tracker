@@ -3,10 +3,10 @@ interface MemberLite { id: number; name: string }
 interface DayExercise { id: number; name: string; order: number; targetSets: number | null; targetReps: string | null }
 interface SetRow {
   id: number; userId: number; exerciseId: number; exerciseName: string
-  setOrder: number; weight: number; reps: number; note: string | null
+  setOrder: number; weight: number; reps: number; skipped: boolean; note: string | null
 }
 interface WorkoutData {
-  workout: { id: number; date: string; dayId: number | null; finishedAt: string | null }
+  workout: { id: number; date: string; dayId: number | null; finishedAt: string | null; recordMode: 'each' | 'single' }
   members: MemberLite[]
   sets: SetRow[]
 }
@@ -65,6 +65,19 @@ watch(
 )
 const activeExercise = computed(() => exercises.value.find(e => e.id === activeExerciseId.value) ?? null)
 
+// При смене упражнения ставим активную пилюлю левым краём к левому краю ленты —
+// справа открывается остаток списка для удобного выбора следующего.
+const exStripEl = ref<HTMLElement | null>(null)
+watch(activeExerciseId, async () => {
+  await nextTick()
+  const strip = exStripEl.value
+  const active = strip?.querySelector<HTMLElement>('.ex-pill.active')
+  if (!strip || !active) return
+  const s = strip.getBoundingClientRect()
+  const a = active.getBoundingClientRect()
+  strip.scrollBy({ left: a.left - s.left, behavior: 'smooth' })
+})
+
 const selectedMemberName = computed(() =>
   data.value?.members.find(m => m.id === selectedMemberId.value)?.name ?? '',
 )
@@ -84,9 +97,77 @@ const currentSets = computed(() =>
     .sort((a, b) => a.setOrder - b.setOrder),
 )
 
+const members = computed<MemberLite[]>(() => data.value?.members ?? [])
+const recordMode = computed<'each' | 'single'>(() => data.value?.workout.recordMode ?? 'each')
+
+// Живая синхронизация: чужие правки подтягиваем без перезагрузки, держим presence
+const { online } = useWorkoutSocket(id, () => { refresh() })
+function isOnline(memberId: number): boolean {
+  return online.value.some(u => u.userId === memberId)
+}
+// «Один за всех» с ротацией — только когда участников больше одного
+const rotation = computed(() => recordMode.value === 'single' && members.value.length > 1)
+
+function doneCountFor(exId: number, memberId: number | null): number {
+  if (memberId == null) return 0
+  return (data.value?.sets ?? []).filter(s => s.exerciseId === exId && s.userId === memberId).length
+}
+
 // Done-count badge per exercise for the selected member
 function doneCount(exId: number): number {
-  return (data.value?.sets ?? []).filter(s => s.exerciseId === exId && s.userId === selectedMemberId.value).length
+  return doneCountFor(exId, selectedMemberId.value)
+}
+
+// Целевое число подходов: явное targetSets или длина списка повторов
+function targetCount(ex: DayExercise): number | null {
+  if (ex.targetSets != null) return ex.targetSets
+  if (ex.targetReps) return ex.targetReps.split(',').map(s => s.trim()).filter(Boolean).length
+  return null
+}
+
+function isMemberComplete(exId: number, memberId: number | null): boolean {
+  const ex = exercises.value.find(e => e.id === exId)
+  const t = ex ? targetCount(ex) : null
+  return t != null && doneCountFor(exId, memberId) >= t
+}
+
+// Завершённость упражнения: в ротации — когда у всех участников набрана цель,
+// иначе — у выбранного участника.
+function isComplete(exId: number): boolean {
+  if (rotation.value) return members.value.every(m => isMemberComplete(exId, m.id))
+  return isMemberComplete(exId, selectedMemberId.value)
+}
+
+// Следующий участник по кругу, у которого ещё не набрана цель (или null — все готовы)
+function nextIncompleteMember(exId: number, fromId: number | null): number | null {
+  const ms = members.value
+  if (!ms.length) return null
+  const start = ms.findIndex(m => m.id === fromId)
+  for (let k = 1; k <= ms.length; k++) {
+    const m = ms[(start + k) % ms.length]
+    if (!isMemberComplete(exId, m.id)) return m.id
+  }
+  return null
+}
+
+// Куда переходить после записанного/пропущенного подхода
+function advance(exId: number) {
+  if (rotation.value) {
+    const next = nextIncompleteMember(exId, selectedMemberId.value)
+    if (next != null) { selectedMemberId.value = next; return }
+    // Круг закрыт — следующее незавершённое упражнение, курсор на первого участника
+    const idx = exercises.value.findIndex(e => e.id === exId)
+    const nextEx = exercises.value.slice(idx + 1).find(e => !isComplete(e.id))
+    if (nextEx) { activeExerciseId.value = nextEx.id; selectedMemberId.value = members.value[0]?.id ?? null }
+    return
+  }
+  // Одиночная или «каждый сам»: когда выбранный участник закрыл упражнение,
+  // переходим на следующее, где у него ещё не набрана цель.
+  if (isMemberComplete(exId, selectedMemberId.value)) {
+    const idx = exercises.value.findIndex(e => e.id === exId)
+    const nextEx = exercises.value.slice(idx + 1).find(e => !isMemberComplete(e.id, selectedMemberId.value))
+    if (nextEx) activeExerciseId.value = nextEx.id
+  }
 }
 
 // Steppers + last-time prefill
@@ -111,18 +192,56 @@ watch(
 function stepWeight(delta: number) { weight.value = Math.max(0, Math.round((weight.value + delta) * 4) / 4) }
 function stepReps(delta: number) { reps.value = Math.max(0, reps.value + delta) }
 
+// Числовая клавиатура в Telegram не имеет кнопки «Готово» — закрываем её сами:
+// явный тап по полю, тап мимо полей или Enter снимают фокус с инпута.
+const steppersEl = ref<HTMLElement | null>(null)
+function blurActive() {
+  const a = document.activeElement
+  if (a instanceof HTMLElement) a.blur()
+}
+function onPointerDown(e: PointerEvent) {
+  const a = document.activeElement
+  if (a instanceof HTMLInputElement && steppersEl.value && !steppersEl.value.contains(e.target as Node)) {
+    a.blur()
+  }
+}
+onMounted(() => document.addEventListener('pointerdown', onPointerDown))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown))
+
 const busy = ref(false)
 
 async function record() {
   if (busy.value || !activeExerciseId.value || !selectedMemberId.value) return
+  const exId = activeExerciseId.value
+  // Переходим дальше только если этот участник ещё не закрыл упражнение —
+  // возврат к готовому ради правок обратно не выкинет.
+  const wasComplete = isMemberComplete(exId, selectedMemberId.value)
   busy.value = true
   try {
     await api.post('/api/sets', {
-      workoutId: id, userId: selectedMemberId.value, exerciseId: activeExerciseId.value, weight: weight.value, reps: reps.value,
+      workoutId: id, userId: selectedMemberId.value, exerciseId: exId, weight: weight.value, reps: reps.value,
     })
     await refresh()
+    if (!wasComplete) advance(exId)
   } catch {
     alert('Не удалось записать подход.')
+  } finally {
+    busy.value = false
+  }
+}
+
+async function skip() {
+  if (busy.value || !activeExerciseId.value || !selectedMemberId.value) return
+  const exId = activeExerciseId.value
+  busy.value = true
+  try {
+    await api.post('/api/sets', {
+      workoutId: id, userId: selectedMemberId.value, exerciseId: exId, skipped: true,
+    })
+    await refresh()
+    advance(exId)
+  } catch {
+    alert('Не удалось пропустить подход.')
   } finally {
     busy.value = false
   }
@@ -137,11 +256,31 @@ async function removeSet(setId: number) {
   }
 }
 
+async function onEditSet({ id: setId, weight: w, reps: r }: { id: number; weight: number; reps: number }) {
+  try {
+    await api.patch(`/api/sets/${setId}`, { weight: w, reps: r })
+    await refresh()
+  } catch {
+    alert('Не удалось изменить подход.')
+  }
+}
+
+async function onReorder(ids: number[]) {
+  try {
+    await api.patch('/api/sets/reorder', { ids })
+    await refresh()
+  } catch {
+    alert('Не удалось изменить порядок.')
+    await refresh()
+  }
+}
+
 // Finish → summary (already-finished workouts open straight into the summary)
 const finished = ref(Boolean(data.value?.workout.finishedAt))
 const justFinished = ref(false)
-const totalSets = computed(() => data.value?.sets.length ?? 0)
-const totalTonnage = computed(() => (data.value?.sets ?? []).reduce((acc, s) => acc + s.weight * s.reps, 0))
+const realSets = computed(() => (data.value?.sets ?? []).filter(s => !s.skipped))
+const totalSets = computed(() => realSets.value.length)
+const totalTonnage = computed(() => realSets.value.reduce((acc, s) => acc + s.weight * s.reps, 0))
 const multiMember = computed(() => (data.value?.members.length ?? 0) > 1)
 
 function memberName(uid: number): string {
@@ -149,9 +288,7 @@ function memberName(uid: number): string {
 }
 
 const summaryDate = computed(() =>
-  data.value
-    ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(data.value.workout.date))
-    : '',
+  data.value ? dateWithWeekday(data.value.workout.date, { year: true }) : '',
 )
 
 // Подходы, сгруппированные по упражнению (внутри — по участнику и порядку)
@@ -182,6 +319,27 @@ async function finish() {
 }
 
 function chooseAnother() { navigateTo('/select') }
+
+// Редактирование завершённой тренировки: временно возвращаем её в режим записи
+// (эндпоинты подходов проверяют только членство, не статус), правим, возвращаемся.
+// finishedAt при этом не трогаем — заново не «завершаем».
+const editing = ref(false)
+function startEditing() {
+  justFinished.value = false
+  editing.value = true
+  finished.value = false
+}
+async function doneEditing() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await refresh()
+  } finally {
+    busy.value = false
+  }
+  editing.value = false
+  finished.value = true
+}
 
 const hasSets = computed(() => totalSets.value > 0)
 
@@ -222,11 +380,13 @@ async function cancel() {
       <div v-for="g in summaryGroups" :key="g.exerciseId" class="detail-ex glass">
         <div class="detail-head">
           <span class="detail-name">{{ g.name }}</span>
-          <span class="detail-count">{{ g.sets.length }} подх.</span>
+          <span class="detail-count">{{ g.sets.filter(s => !s.skipped).length }} подх.</span>
         </div>
         <div class="detail-sets">
-          <span v-for="s in g.sets" :key="s.id" class="detail-set">
-            <b>{{ s.weight }}</b><span class="mul">×</span>{{ s.reps }}<em v-if="multiMember"> · {{ memberName(s.userId) }}</em>
+          <span v-for="s in g.sets" :key="s.id" class="detail-set" :class="{ skipped: s.skipped }">
+            <template v-if="s.skipped">пропуск</template>
+            <template v-else><b>{{ s.weight }}</b><span class="mul">×</span>{{ s.reps }}</template>
+            <em v-if="multiMember"> · {{ memberName(s.userId) }}</em>
           </span>
         </div>
       </div>
@@ -234,6 +394,7 @@ async function cancel() {
 
     <div class="cta">
       <AppButton icon-end="lucide:move-right" @click="navigateTo('/')">На главную</AppButton>
+      <AppButton icon="lucide:pencil" variant="ghost" @click="startEditing">Редактировать</AppButton>
     </div>
   </section>
 
@@ -241,6 +402,7 @@ async function cancel() {
   <section v-else class="page">
     <header class="head">
       <h1 class="screen-title">{{ dayTitle }}</h1>
+      <p v-if="editing" class="edit-note"><Icon name="lucide:pencil" /> Редактирование завершённой тренировки</p>
       <div v-if="data && data.members.length > 1" class="members">
         <span class="members-label">Чей подход</span>
         <div class="members-chips">
@@ -252,6 +414,7 @@ async function cancel() {
             :class="{ active: selectedMemberId === m.id }"
             @click="selectedMemberId = m.id"
           >
+            <span v-if="isOnline(m.id)" class="online-dot" :title="'В сети'" aria-hidden="true" />
             {{ m.name }}
           </button>
         </div>
@@ -260,17 +423,18 @@ async function cancel() {
 
     <template v-if="exercises.length">
       <!-- Exercise switcher -->
-      <div class="ex-strip">
+      <div ref="exStripEl" class="ex-strip">
         <button
           v-for="ex in exercises"
           :key="ex.id"
           type="button"
           class="ex-pill"
-          :class="{ active: activeExerciseId === ex.id }"
+          :class="{ active: activeExerciseId === ex.id, complete: isComplete(ex.id) }"
           @click="activeExerciseId = ex.id"
         >
           {{ ex.name }}
-          <span v-if="doneCount(ex.id)" class="ex-badge">{{ doneCount(ex.id) }}</span>
+          <span v-if="isComplete(ex.id)" class="ex-badge done"><Icon name="lucide:check" /></span>
+          <span v-else-if="doneCount(ex.id)" class="ex-badge">{{ doneCount(ex.id) }}</span>
         </button>
       </div>
 
@@ -292,12 +456,21 @@ async function cancel() {
           <template v-else>Прошлый раз — нет данных</template>
         </p>
 
-        <div class="steppers">
+        <div ref="steppersEl" class="steppers">
           <div class="stepper">
             <span class="stepper-label">Вес, кг</span>
             <div class="stepper-row">
               <button type="button" class="step-btn" @click="stepWeight(-2.5)"><Icon name="lucide:minus" /></button>
-              <input v-model.number="weight" type="number" inputmode="decimal" step="2.5" min="0" class="step-input" />
+              <input
+                v-model.number="weight"
+                type="number"
+                inputmode="decimal"
+                enterkeyhint="done"
+                step="2.5"
+                min="0"
+                class="step-input"
+                @keydown.enter.prevent="blurActive"
+              />
               <button type="button" class="step-btn" @click="stepWeight(2.5)"><Icon name="lucide:plus" /></button>
             </div>
           </div>
@@ -305,22 +478,36 @@ async function cancel() {
             <span class="stepper-label">Повторы</span>
             <div class="stepper-row">
               <button type="button" class="step-btn" @click="stepReps(-1)"><Icon name="lucide:minus" /></button>
-              <input v-model.number="reps" type="number" inputmode="numeric" step="1" min="0" class="step-input" />
+              <input
+                v-model.number="reps"
+                type="number"
+                inputmode="numeric"
+                enterkeyhint="done"
+                step="1"
+                min="0"
+                class="step-input"
+                @keydown.enter.prevent="blurActive"
+              />
               <button type="button" class="step-btn" @click="stepReps(1)"><Icon name="lucide:plus" /></button>
             </div>
           </div>
         </div>
 
-        <AppButton icon="lucide:plus" :disabled="busy" @click="record">Записать подход</AppButton>
+        <div class="record-row">
+          <AppButton icon="lucide:plus" :disabled="busy" @click="record">Записать подход</AppButton>
+          <button type="button" class="skip-btn" :disabled="busy" @click="skip">
+            <Icon name="lucide:skip-forward" /> Пропустить
+          </button>
+        </div>
 
         <!-- Set list -->
-        <ul v-if="currentSets.length" class="set-list">
-          <li v-for="(s, i) in currentSets" :key="s.id" class="set-row">
-            <span class="set-idx">{{ i + 1 }}</span>
-            <span class="set-val">{{ s.weight }} × {{ s.reps }}</span>
-            <button type="button" class="set-del" @click="removeSet(s.id)"><Icon name="lucide:x" /></button>
-          </li>
-        </ul>
+        <WorkoutSetList
+          v-if="currentSets.length"
+          :sets="currentSets"
+          @reorder="onReorder"
+          @edit="onEditSet"
+          @remove="removeSet"
+        />
       </div>
     </template>
 
@@ -329,9 +516,14 @@ async function cancel() {
     </div>
 
     <div class="actions">
-      <AppButton icon="lucide:check" variant="accent" :disabled="busy" @click="finish">Завершить</AppButton>
-      <AppButton icon="lucide:list" variant="ghost" :disabled="busy" @click="chooseAnother">Выбрать другую</AppButton>
-      <button v-if="!hasSets" type="button" class="cancel" :disabled="busy" @click="cancel">Отменить тренировку</button>
+      <template v-if="editing">
+        <AppButton icon="lucide:check" variant="accent" :disabled="busy" @click="doneEditing">Готово</AppButton>
+      </template>
+      <template v-else>
+        <AppButton icon="lucide:check" variant="accent" :disabled="busy" @click="finish">Завершить</AppButton>
+        <AppButton icon="lucide:list" variant="ghost" :disabled="busy" @click="chooseAnother">Выбрать другую</AppButton>
+        <button v-if="!hasSets" type="button" class="cancel" :disabled="busy" @click="cancel">Отменить тренировку</button>
+      </template>
     </div>
   </section>
 </template>
@@ -358,6 +550,16 @@ async function cancel() {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+.edit-note {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 /* Member chips */
@@ -389,6 +591,9 @@ async function cancel() {
 }
 
 .member-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   min-height: 36px;
   padding: 0 var(--space-3);
   border: 1px solid var(--glass-edge-flat);
@@ -400,6 +605,14 @@ async function cancel() {
   cursor: pointer;
 
   &.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34c759;
+  flex-shrink: 0;
 }
 
 /* Exercise switcher */
@@ -429,6 +642,11 @@ async function cancel() {
   cursor: pointer;
 
   &.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+
+  &.complete:not(.active) {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    color: var(--text);
+  }
 }
 
 .ex-badge {
@@ -441,6 +659,20 @@ async function cancel() {
   background: rgba(0, 0, 0, 0.18);
   font-size: 11px;
   font-weight: 700;
+
+  &.done {
+    padding: 0;
+    width: 18px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 12px;
+  }
+}
+
+/* На активной (оранжевой) пилюле галочка читается инверсно */
+.ex-pill.active .ex-badge.done {
+  background: var(--accent-text);
+  color: var(--accent);
 }
 
 /* Active exercise panel */
@@ -473,6 +705,29 @@ async function cancel() {
   b { color: var(--text); font-weight: 700; }
 }
 
+.record-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skip-btn {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+
+  &:active:not(:disabled) { color: var(--text); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
 /* Steppers */
 .steppers {
   display: flex;
@@ -502,7 +757,7 @@ async function cancel() {
 
 .step-btn {
   flex-shrink: 0;
-  width: 40px;
+  width: 38px;
   height: 44px;
   border: 1px solid var(--glass-edge-flat);
   border-radius: var(--radius-md);
@@ -521,6 +776,7 @@ async function cancel() {
   width: 100%;
   min-width: 0;
   height: 44px;
+  padding: 0 2px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -528,68 +784,13 @@ async function cancel() {
   text-align: center;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 26px;
+  font-size: clamp(18px, 5vw, 24px);
+  font-variant-numeric: tabular-nums;
   -moz-appearance: textfield;
 
   &::-webkit-outer-spin-button,
   &::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   &:focus { outline: none; }
-}
-
-/* Recorded sets */
-.set-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.set-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-}
-
-.set-idx {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.set-val {
-  flex: 1;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--text);
-}
-
-.set-del {
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  display: grid;
-  place-items: center;
-  font-size: 16px;
-  cursor: pointer;
-
-  &:active { color: var(--text); }
 }
 
 .empty {
@@ -704,7 +905,9 @@ async function cancel() {
   b { font-family: var(--font-display); font-weight: 800; }
   .mul { color: var(--muted); margin: 0 2px; }
   em { color: var(--muted); font-style: normal; font-size: 12px; }
+
+  &.skipped { color: var(--muted); font-style: italic; }
 }
 
-.cta { width: 100%; margin-top: auto; }
+.cta { width: 100%; margin-top: auto; display: flex; flex-direction: column; gap: var(--space-2); }
 </style>
