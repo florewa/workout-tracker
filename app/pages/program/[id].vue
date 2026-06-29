@@ -4,7 +4,17 @@ interface BankItem { id: number; name: string; nameEn: string | null; muscleGrou
 
 const route = useRoute()
 const api = useApi()
+const session = useSessionStore()
 const { toast, confirm } = useDialog()
+
+interface Member { id: number; name: string }
+const { data: friends } = await useAsyncData('prog-friends', () => api.get<Member[]>('/api/friends'), { server: false })
+onMounted(async () => { if (!session.currentUser) { try { await session.loadMe() } catch { /* no-op */ } } })
+const circle = computed<Member[]>(() => {
+  const self = session.currentUser
+  const list = friends.value ?? []
+  return self ? [self, ...list.filter(f => f.id !== self.id)] : list
+})
 
 const WEEKDAYS: [string, number][] = [['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 7]]
 
@@ -98,6 +108,30 @@ async function removeDay() {
   catch { toast('Не удалось удалить', 'error') }
 }
 
+// ── Базовые значения участников ──
+const baseFor = ref<{ exerciseId: number; name: string } | null>(null)
+const baseValues = ref<Record<number, { weight: number | null; reps: number | null }>>({})
+async function openBase(it: PE) {
+  baseFor.value = { exerciseId: it.id, name: it.name }
+  const map: Record<number, { weight: number | null; reps: number | null }> = {}
+  for (const m of circle.value) map[m.id] = { weight: null, reps: null }
+  try {
+    const defs = await api.get<{ userId: number; weight: number; reps: number }[]>(`/api/exercises/${it.id}/defaults`)
+    for (const d of defs) map[d.userId] = { weight: d.weight, reps: d.reps }
+  } catch { /* no-op */ }
+  baseValues.value = map
+}
+function closeBase() { baseFor.value = null }
+async function saveBase(userId: number) {
+  const v = baseValues.value[userId]
+  if (!baseFor.value || !v || v.weight == null || v.reps == null) return
+  try {
+    await api.put(`/api/exercises/${baseFor.value.exerciseId}/defaults`, { userId, weight: Number(v.weight) || 0, reps: Number(v.reps) || 0 })
+  } catch {
+    toast('Не удалось сохранить базу', 'error')
+  }
+}
+
 // ── Подбор из банка ──
 const picking = ref(false)
 const bankSearch = ref('')
@@ -180,6 +214,7 @@ async function addExercise(ex: BankItem) {
               <span class="t-x">×</span>
               <input v-model="it.targetReps" type="text" class="t-input t-reps" placeholder="повт. (8-12)" @change="saveTarget(it)" />
             </div>
+            <button type="button" class="base-link" @click="openBase(it)"><Icon name="lucide:scale" /> Базовые веса</button>
           </div>
           <button type="button" class="ex-del" aria-label="Убрать" @click="removeItem(it.peId)"><Icon name="lucide:x" /></button>
         </li>
@@ -190,6 +225,29 @@ async function addExercise(ex: BankItem) {
     <div class="cta">
       <AppButton icon="lucide:check" :disabled="busy" @click="saveDay">Сохранить</AppButton>
     </div>
+
+    <!-- Базовые веса участников -->
+    <Teleport to="body">
+      <Transition name="sheet">
+        <div v-if="baseFor" class="sheet-backdrop" @click.self="closeBase">
+          <div class="sheet glass">
+            <div class="sheet-head">
+              <h2 class="sheet-title">Базовые веса · {{ baseFor.name }}</h2>
+              <button type="button" class="icon-btn" @click="closeBase"><Icon name="lucide:x" /></button>
+            </div>
+            <p class="base-hint">Стартовые вес × повторы для каждого — подставятся при записи, если по упражнению ещё нет истории.</p>
+            <div class="base-list">
+              <div v-for="m in circle" :key="m.id" class="base-row">
+                <span class="base-name">{{ m.name }}</span>
+                <input v-model="baseValues[m.id].weight" type="number" inputmode="decimal" min="0" step="2.5" class="t-input b-w" placeholder="кг" @change="saveBase(m.id)" />
+                <span class="t-x">×</span>
+                <input v-model="baseValues[m.id].reps" type="number" inputmode="numeric" min="0" class="t-input b-r" placeholder="повт." @change="saveBase(m.id)" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Подбор из банка -->
     <Teleport to="body">
@@ -315,6 +373,19 @@ async function addExercise(ex: BankItem) {
 .t-reps { flex: 1; min-width: 0; }
 .t-x { color: var(--muted); }
 .ex-del { width: 30px; height: 30px; border: 0; background: none; color: var(--muted); cursor: pointer; flex-shrink: 0; }
+.base-link {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 2px 0;
+  color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+
+.base-hint { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.35; }
+.base-list { display: flex; flex-direction: column; gap: var(--space-2); overflow-y: auto; }
+.base-row { display: flex; align-items: center; gap: 8px; }
+.base-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.b-w { width: 64px; }
+.b-r { width: 64px; }
 
 .ex-empty { color: var(--muted); font-size: 14px; text-align: center; padding: var(--space-4) 0; }
 

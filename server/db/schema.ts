@@ -87,6 +87,16 @@ export const workoutMembers = pgTable('workout_members', {
   pk: primaryKey({ columns: [t.workoutId, t.userId] }),
 }))
 
+// Базовое значение участника по упражнению — стартовая подстановка при записи
+export const exerciseDefaults = pgTable('exercise_defaults', {
+  userId: integer('user_id').notNull().references(() => users.id),
+  exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
+  weight: real('weight').notNull(),
+  reps: integer('reps').notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userId, t.exerciseId] }),
+}))
+
 export const sets = pgTable('sets', {
   id: serial('id').primaryKey(),
   workoutId: integer('workout_id').notNull().references(() => workouts.id),

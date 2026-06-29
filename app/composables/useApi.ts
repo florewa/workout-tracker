@@ -13,6 +13,8 @@ export function useApi() {
       $fetch<T>(url, { method: 'POST', headers: headers(), body }),
     patch: <T>(url: string, body?: unknown) =>
       $fetch<T>(url, { method: 'PATCH', headers: headers(), body }),
+    put: <T>(url: string, body?: unknown) =>
+      $fetch<T>(url, { method: 'PUT', headers: headers(), body }),
     del: <T>(url: string) =>
       $fetch<T>(url, { method: 'DELETE', headers: headers() }),
   }

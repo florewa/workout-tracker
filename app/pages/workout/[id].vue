@@ -174,18 +174,18 @@ function advance(exId: number) {
 // Steppers + last-time prefill
 const weight = ref(20)
 const reps = ref(10)
-const lastHint = ref<{ weight: number; reps: number } | null>(null)
+const prefill = ref<{ weight: number; reps: number; source: 'last' | 'default' } | null>(null)
 
 watch(
   [activeExerciseId, selectedMemberId],
   async ([exId, memId]) => {
-    if (!exId || !memId) { lastHint.value = null; return }
+    if (!exId || !memId) { prefill.value = null; return }
     try {
-      lastHint.value = await api.get<{ weight: number; reps: number } | null>(`/api/exercises/${exId}/last`, { userId: memId })
+      prefill.value = await api.get<{ weight: number; reps: number; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId })
     } catch {
-      lastHint.value = null
+      prefill.value = null
     }
-    if (lastHint.value) { weight.value = lastHint.value.weight; reps.value = lastHint.value.reps }
+    if (prefill.value) { weight.value = prefill.value.weight; reps.value = prefill.value.reps }
   },
   { immediate: true },
 )
@@ -460,7 +460,8 @@ async function cancel() {
         </p>
 
         <p class="last-hint">
-          <template v-if="lastHint">Прошлый раз: <b>{{ lastHint.weight }}</b> × <b>{{ lastHint.reps }}</b></template>
+          <template v-if="prefill && prefill.source === 'last'">Прошлый раз: <b>{{ prefill.weight }}</b> × <b>{{ prefill.reps }}</b></template>
+          <template v-else-if="prefill && prefill.source === 'default'">База: <b>{{ prefill.weight }}</b> × <b>{{ prefill.reps }}</b></template>
           <template v-else>Прошлый раз — нет данных</template>
         </p>
 
