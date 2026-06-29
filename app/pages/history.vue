@@ -54,7 +54,7 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
 <style scoped lang="scss">
 .page {
   height: 100%;
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-4) 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -67,6 +67,9 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* выходим за паддинг страницы и возвращаем его внутрь — тени карточек не режутся */
+  margin: 0 calc(-1 * var(--space-4));
+  padding: 0 var(--space-4) var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);

@@ -41,8 +41,9 @@ onMounted(async () => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px;
-  padding-top: max(16px, env(safe-area-inset-top));
+  /* горизонтальные отступы задаёт сама страница — иначе они складываются вдвое,
+     а overflow контента режет box-shadow карточек */
+  padding-top: env(safe-area-inset-top);
   /* отступ под фиксированный таб-бар, чтобы контент не прятался за ним */
   padding-bottom: calc(78px + env(safe-area-inset-bottom));
 }
