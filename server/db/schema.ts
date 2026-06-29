@@ -23,10 +23,18 @@ export const friendships = pgTable('friendships', {
   pk: primaryKey({ columns: [t.userLow, t.userHigh] }),
 }))
 
+export const categories = pgTable('categories', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 120 }).notNull().unique(),
+  order: integer('order').notNull().default(0),
+})
+
 export const exercises = pgTable('exercises', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 200 }).notNull().unique(),
   muscleGroup: varchar('muscle_group', { length: 120 }),
+  categoryId: integer('category_id').references((): AnyPgColumn => categories.id),
+  imageUrl: text('image_url'),
   defaultReps: varchar('default_reps', { length: 40 }),
   defaultTempo: varchar('default_tempo', { length: 20 }),
   isArchived: boolean('is_archived').notNull().default(false),

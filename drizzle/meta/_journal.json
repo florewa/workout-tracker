@@ -64,6 +64,13 @@
       "when": 1782739793682,
       "tag": "0008_skinny_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782758864089,
+      "tag": "0009_stale_king_cobra",
+      "breakpoints": true
     }
   ]
 }

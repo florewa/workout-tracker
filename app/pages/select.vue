@@ -103,6 +103,8 @@ function selectDay(day: ProgramDay) {
 function openWorkout(id: number) {
   navigateTo('/workout/' + id)
 }
+
+function openBank() { navigateTo('/exercises') }
 </script>
 
 <template>
@@ -184,6 +186,16 @@ function openWorkout(id: number) {
     <template v-else-if="selectedDate < todayIso">
       <p class="empty-day">В этот день тренировок не было</p>
     </template>
+
+    <!-- Банк упражнений -->
+    <button type="button" class="bank-entry glass" @click="openBank">
+      <span class="bank-icon" aria-hidden="true"><Icon name="lucide:library" /></span>
+      <span class="bank-text">
+        <span class="bank-title">Банк упражнений</span>
+        <span class="bank-sub">Создавай, ищи, добавляй фото</span>
+      </span>
+      <Icon name="lucide:chevron-right" class="bank-chevron" aria-hidden="true" />
+    </button>
     </div>
   </section>
 </template>
@@ -397,4 +409,31 @@ function openWorkout(id: number) {
   font-size: 14px;
   padding: var(--space-6) 0;
 }
+
+/* ── Exercise bank entry ── */
+.bank-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+.bank-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.bank-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.bank-title { font-size: 15px; font-weight: 700; }
+.bank-sub { font-size: 12px; color: var(--muted); }
+.bank-chevron { font-size: 20px; color: var(--muted); flex-shrink: 0; }
 </style>
