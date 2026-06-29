@@ -11,6 +11,7 @@ const { toast, confirm } = useDialog()
 
 const search = ref('')
 const activeCategory = ref<number | null>(null)
+const activeMuscle = ref<string | null>(null)
 
 const { data: categories, refresh: refreshCategories } = await useAsyncData(
   'bank-categories', () => api.get<Category[]>('/api/categories'), { server: false },
@@ -25,6 +26,7 @@ const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return (exercises.value ?? []).filter(e =>
     (activeCategory.value == null || e.categoryId === activeCategory.value)
+    && (activeMuscle.value == null || (e.primaryMuscles ?? []).includes(activeMuscle.value))
     && (!q || e.name.toLowerCase().includes(q) || (e.nameEn ?? '').toLowerCase().includes(q)),
   )
 })
@@ -32,8 +34,35 @@ const filtered = computed(() => {
 // порционный показ — в банке сотни упражнений
 const PAGE = 60
 const limit = ref(PAGE)
-watch([search, activeCategory], () => { limit.value = PAGE })
+watch([search, activeCategory, activeMuscle], () => { limit.value = PAGE })
 const visible = computed(() => filtered.value.slice(0, limit.value))
+
+// ── Детальная карточка ──
+interface ExerciseDetail {
+  id: number; name: string; nameEn: string | null; muscleGroup: string | null
+  primaryMuscles: string[] | null; secondaryMuscles: string[] | null
+  equipment: string | null; instructions: string | null
+  categoryId: number | null; categoryName: string | null; imageUrl: string | null
+}
+const detail = ref<ExerciseDetail | null>(null)
+async function openDetail(id: number) {
+  try { detail.value = await api.get<ExerciseDetail>(`/api/exercises/${id}`) }
+  catch { toast('Не удалось открыть упражнение', 'error') }
+}
+function closeDetail() { detail.value = null }
+const detailSteps = computed(() => (detail.value?.instructions ?? '').split('\n').map(s => s.trim()).filter(Boolean))
+const similar = computed(() => {
+  const d = detail.value
+  const key = d?.primaryMuscles?.[0]
+  if (!key) return []
+  return (exercises.value ?? []).filter(e => e.id !== d!.id && (e.primaryMuscles ?? []).includes(key)).slice(0, 8)
+})
+function editFromDetail() {
+  const d = detail.value
+  if (!d) return
+  detail.value = null
+  openEdit({ id: d.id, name: d.name, nameEn: d.nameEn, muscleGroup: d.muscleGroup, primaryMuscles: d.primaryMuscles, categoryId: d.categoryId, categoryName: d.categoryName, imageUrl: d.imageUrl })
+}
 
 function goBack() { navigateTo('/select') }
 
@@ -183,10 +212,24 @@ async function deleteCategory(id: number) {
       </button>
     </div>
 
+    <div class="chips muscles">
+      <button type="button" class="chip" :class="{ active: activeMuscle === null }" @click="activeMuscle = null">Все мышцы</button>
+      <button
+        v-for="m in FILTER_MUSCLES"
+        :key="m"
+        type="button"
+        class="chip"
+        :class="{ active: activeMuscle === m }"
+        @click="activeMuscle = activeMuscle === m ? null : m"
+      >
+        {{ muscleRu(m) }}
+      </button>
+    </div>
+
     <div class="scroll">
       <template v-if="filtered.length">
         <div class="grid">
-          <button v-for="e in visible" :key="e.id" type="button" class="card glass" @click="openEdit(e)">
+          <button v-for="e in visible" :key="e.id" type="button" class="card glass" @click="openDetail(e.id)">
             <div class="thumb">
               <img v-if="e.imageUrl" :src="e.imageUrl" :alt="e.name" loading="lazy" />
               <Icon v-else name="lucide:dumbbell" class="thumb-fallback" />
@@ -207,6 +250,52 @@ async function deleteCategory(id: number) {
     <button type="button" class="fab" aria-label="Создать упражнение" @click="openCreate">
       <Icon name="lucide:plus" />
     </button>
+
+    <!-- Деталь упражнения -->
+    <Teleport to="body">
+      <Transition name="sheet">
+        <div v-if="detail" class="sheet-backdrop" @click.self="closeDetail">
+          <div class="sheet glass">
+            <div class="sheet-head">
+              <h2 class="sheet-title">{{ detail.name }}</h2>
+              <button type="button" class="sheet-close" @click="closeDetail"><Icon name="lucide:x" /></button>
+            </div>
+
+            <img v-if="detail.imageUrl" :src="detail.imageUrl" :alt="detail.name" class="detail-image" />
+
+            <MuscleMap
+              v-if="detail.primaryMuscles?.length"
+              :primary="detail.primaryMuscles ?? []"
+              :secondary="detail.secondaryMuscles ?? []"
+            />
+
+            <div v-if="detail.muscleGroup || detail.equipment" class="detail-meta">
+              <span v-if="detail.muscleGroup" class="meta-pill"><Icon name="lucide:target" /> {{ detail.muscleGroup }}</span>
+              <span v-if="detail.equipment" class="meta-pill"><Icon name="lucide:dumbbell" /> {{ detail.equipment }}</span>
+            </div>
+
+            <ol v-if="detailSteps.length" class="steps">
+              <li v-for="(s, i) in detailSteps" :key="i">{{ s }}</li>
+            </ol>
+
+            <div v-if="similar.length" class="similar">
+              <span class="similar-title">Обычно в связке с</span>
+              <div class="similar-row">
+                <button v-for="s in similar" :key="s.id" type="button" class="similar-card" @click="openDetail(s.id)">
+                  <img v-if="s.imageUrl" :src="s.imageUrl" :alt="s.name" loading="lazy" />
+                  <Icon v-else name="lucide:dumbbell" class="similar-fallback" />
+                  <span class="similar-name">{{ s.name }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="sheet-actions">
+              <AppButton icon="lucide:pencil" variant="ghost" @click="editFromDetail">Редактировать</AppButton>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Создание/правка -->
     <Teleport to="body">
@@ -489,6 +578,64 @@ async function deleteCategory(id: number) {
   padding: var(--space-2);
   cursor: pointer;
 }
+
+.chips.muscles { margin-top: calc(-1 * var(--space-1)); }
+
+.detail-image {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.detail-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--space-3);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.similar { display: flex; flex-direction: column; gap: var(--space-2); }
+.similar-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.similar-row {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+.similar-card {
+  flex-shrink: 0;
+  width: 96px;
+  border: 0;
+  padding: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  img { width: 96px; height: 64px; object-fit: cover; }
+}
+.similar-fallback { width: 96px; height: 64px; display: grid; place-items: center; font-size: 24px; color: var(--muted); }
+.similar-name { padding: 6px; font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.2; text-align: left; }
 
 .sheet-enter-active, .sheet-leave-active { transition: opacity 0.2s ease; }
 .sheet-enter-from, .sheet-leave-to { opacity: 0; }

@@ -24,6 +24,7 @@ export interface ExerciseFull {
   name: string
   nameEn: string | null
   muscleGroup: string | null
+  primaryMuscles: string[] | null
   categoryId: number | null
   categoryName: string | null
   imageUrl: string | null
@@ -43,6 +44,7 @@ export async function listExercisesFull(
       name: exercises.name,
       nameEn: exercises.nameEn,
       muscleGroup: exercises.muscleGroup,
+      primaryMuscles: exercises.primaryMuscles,
       categoryId: exercises.categoryId,
       categoryName: categories.name,
       imageUrl: exercises.imageUrl,
@@ -51,6 +53,28 @@ export async function listExercisesFull(
     .leftJoin(categories, eq(categories.id, exercises.categoryId))
     .where(and(...where))
     .orderBy(asc(exercises.name))
+}
+
+export async function getExercise(executor: Executor, id: number) {
+  const [row] = await executor
+    .select({
+      id: exercises.id,
+      name: exercises.name,
+      nameEn: exercises.nameEn,
+      muscleGroup: exercises.muscleGroup,
+      primaryMuscles: exercises.primaryMuscles,
+      secondaryMuscles: exercises.secondaryMuscles,
+      equipment: exercises.equipment,
+      instructions: exercises.instructions,
+      categoryId: exercises.categoryId,
+      categoryName: categories.name,
+      imageUrl: exercises.imageUrl,
+    })
+    .from(exercises)
+    .leftJoin(categories, eq(categories.id, exercises.categoryId))
+    .where(eq(exercises.id, id))
+    .limit(1)
+  return row ?? null
 }
 
 export async function createExercise(
