@@ -10,7 +10,8 @@ interface WorkoutRow {
 }
 
 const api = useApi()
-const { data: workouts } = await useAsyncData(
+const { confirm, toast } = useDialog()
+const { data: workouts, refresh } = await useAsyncData(
   'history',
   () => api.get<WorkoutRow[]>('/api/workouts'),
   { server: false },
@@ -21,6 +22,22 @@ function dateLabel(iso: string): string {
 }
 
 function open(id: number) { navigateTo(`/workout/${id}`) }
+
+async function remove(w: WorkoutRow) {
+  const ok = await confirm({
+    title: 'Удалить тренировку?',
+    message: `${w.dayCode ?? 'Тренировка'} · ${dateLabel(w.date)}. Все подходы будут удалены без возможности восстановить.`,
+    confirmText: 'Удалить',
+    danger: true,
+  })
+  if (!ok) return
+  try {
+    await api.del(`/api/workouts/${w.id}`)
+    await refresh()
+  } catch {
+    toast('Не удалось удалить', 'error')
+  }
+}
 </script>
 
 <template>
@@ -31,16 +48,18 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
 
     <div class="scroll">
     <div v-if="workouts && workouts.length" class="list glass">
-      <button v-for="w in workouts" :key="w.id" type="button" class="row" @click="open(w.id)">
-        <div class="row-main">
-          <span class="row-title">{{ w.dayCode ?? 'Тренировка' }}</span>
-          <span class="row-date">{{ dateLabel(w.date) }}</span>
-        </div>
-        <div class="row-meta">
+      <div v-for="w in workouts" :key="w.id" class="row">
+        <button type="button" class="row-open" @click="open(w.id)">
+          <div class="row-main">
+            <span class="row-title">{{ w.dayCode ?? 'Тренировка' }}</span>
+            <span class="row-date">{{ dateLabel(w.date) }}</span>
+          </div>
           <span class="row-sets">{{ w.setCount }} подх.</span>
-          <Icon name="lucide:chevron-right" class="row-arrow" />
-        </div>
-      </button>
+        </button>
+        <button type="button" class="row-del" aria-label="Удалить тренировку" @click="remove(w)">
+          <Icon name="lucide:trash-2" />
+        </button>
+      </div>
     </div>
 
     <div v-else class="empty glass">
@@ -92,19 +111,37 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
 
 .row {
   display: flex;
+  align-items: stretch;
+  &:not(:last-child) { border-bottom: 1px solid var(--glass-edge-flat); }
+}
+
+.row-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
   border: 0;
   background: transparent;
   color: var(--text);
   text-align: left;
   cursor: pointer;
-
-  &:not(:last-child) { border-bottom: 1px solid var(--glass-edge-flat); }
   &:active { background: var(--surface-2); }
+}
+
+.row-del {
+  flex-shrink: 0;
+  width: 48px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  cursor: pointer;
+  &:active { color: #ff3b30; }
 }
 
 .row-main {
@@ -125,21 +162,10 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
   color: var(--muted);
 }
 
-.row-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
 .row-sets {
   font-size: 13px;
   color: var(--muted);
-}
-
-.row-arrow {
-  font-size: 18px;
-  color: var(--muted);
+  flex-shrink: 0;
 }
 
 .empty {
