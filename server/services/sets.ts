@@ -6,7 +6,7 @@ type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>
 
 export async function addSet(
   executor: Executor,
-  input: { workoutId: number; userId: number; exerciseId: number; weight: number; reps: number; skipped?: boolean; note?: string | null },
+  input: { workoutId: number; userId: number; exerciseId: number; variationId?: number | null; weight: number; reps: number; skipped?: boolean; note?: string | null },
 ): Promise<{ id: number; setOrder: number }> {
   // Гонка двух параллельных записей могла бы выдать одинаковый set_order.
   // Защищает UNIQUE(workout_id, user_id, exercise_id, set_order) + retry с пересчётом.
@@ -25,6 +25,7 @@ export async function addSet(
         workoutId: input.workoutId,
         userId: input.userId,
         exerciseId: input.exerciseId,
+        variationId: input.variationId ?? null,
         setOrder,
         weight: input.weight,
         reps: input.reps,
@@ -113,7 +114,7 @@ export async function lastSet(
     .where(eq(exercises.aliasOf, exerciseId))
   const ids = [exerciseId, ...aliasIds.map((r) => r.id)]
   const [row] = await executor
-    .select({ weight: sets.weight, reps: sets.reps })
+    .select({ weight: sets.weight, reps: sets.reps, variationId: sets.variationId })
     .from(sets)
     .where(and(eq(sets.userId, userId), inArray(sets.exerciseId, ids), eq(sets.skipped, false)))
     .orderBy(desc(sets.createdAt), desc(sets.id))

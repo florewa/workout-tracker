@@ -87,6 +87,14 @@ export const workoutMembers = pgTable('workout_members', {
   pk: primaryKey({ columns: [t.workoutId, t.userId] }),
 }))
 
+// Вариации упражнения (один и тот же движок, разный снаряд: гантели/тренажёр)
+export const exerciseVariations = pgTable('exercise_variations', {
+  id: serial('id').primaryKey(),
+  exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
+  name: varchar('name', { length: 120 }).notNull(),
+  isDefault: boolean('is_default').notNull().default(false),
+})
+
 // Базовое значение участника по упражнению — стартовая подстановка при записи
 export const exerciseDefaults = pgTable('exercise_defaults', {
   userId: integer('user_id').notNull().references(() => users.id),
@@ -102,6 +110,7 @@ export const sets = pgTable('sets', {
   workoutId: integer('workout_id').notNull().references(() => workouts.id),
   userId: integer('user_id').notNull().references(() => users.id),
   exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
+  variationId: integer('variation_id').references(() => exerciseVariations.id),
   setOrder: integer('set_order').notNull(),
   weight: real('weight').notNull(),
   reps: integer('reps').notNull(),

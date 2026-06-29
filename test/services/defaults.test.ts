@@ -18,11 +18,11 @@ describe('defaults', () => {
   it('prefill: база при отсутствии истории, последний подход — приоритетнее', async () => {
     const { danil, benchId } = await seedBaseline()
     await setDefault(testDb, danil, benchId, 50, 8)
-    expect(await prefillValue(testDb, danil, benchId)).toEqual({ weight: 50, reps: 8, source: 'default' })
+    expect(await prefillValue(testDb, danil, benchId)).toEqual({ weight: 50, reps: 8, variationId: null, source: 'default' })
 
     const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
     await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
-    expect(await prefillValue(testDb, danil, benchId)).toEqual({ weight: 60, reps: 5, source: 'last' })
+    expect(await prefillValue(testDb, danil, benchId)).toEqual({ weight: 60, reps: 5, variationId: null, source: 'last' })
   })
 
   it('prefill: null без базы и истории', async () => {

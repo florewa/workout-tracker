@@ -23,7 +23,7 @@ describe('sets', () => {
     await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
     await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 62.5, reps: 4 })
     const last = await lastSet(testDb, danil, benchId)
-    expect(last).toEqual({ weight: 62.5, reps: 4 })
+    expect(last).toEqual({ weight: 62.5, reps: 4, variationId: null })
   })
 
   it('lastSet возвращает null, если подходов не было', async () => {
@@ -52,7 +52,7 @@ describe('sets', () => {
     const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
     await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
     await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 0, reps: 0, skipped: true })
-    expect(await lastSet(testDb, danil, benchId)).toEqual({ weight: 60, reps: 5 })
+    expect(await lastSet(testDb, danil, benchId)).toEqual({ weight: 60, reps: 5, variationId: null })
   })
 
   it('updateSet меняет вес и повторы', async () => {
@@ -60,7 +60,7 @@ describe('sets', () => {
     const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
     const s = await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
     await updateSet(testDb, s.id, { weight: 65, reps: 3 })
-    expect(await lastSet(testDb, danil, benchId)).toEqual({ weight: 65, reps: 3 })
+    expect(await lastSet(testDb, danil, benchId)).toEqual({ weight: 65, reps: 3, variationId: null })
   })
 
   it('reorderSets переставляет подходы и сохраняет порядок 1..n', async () => {

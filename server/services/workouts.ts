@@ -1,7 +1,7 @@
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import {
-  workouts, workoutMembers, sets, users, exercises, programDays,
+  workouts, workoutMembers, sets, users, exercises, programDays, exerciseVariations,
 } from '~~/server/db/schema'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
@@ -136,10 +136,13 @@ export async function getWorkout(executor: Executor, id: number) {
         weight: sets.weight,
         reps: sets.reps,
         skipped: sets.skipped,
+        variationId: sets.variationId,
+        variationName: exerciseVariations.name,
         note: sets.note,
       })
       .from(sets)
       .innerJoin(exercises, eq(sets.exerciseId, exercises.id))
+      .leftJoin(exerciseVariations, eq(exerciseVariations.id, sets.variationId))
       .where(eq(sets.workoutId, id))
       .orderBy(sets.exerciseId, sets.setOrder),
   ])

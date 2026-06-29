@@ -1,5 +1,5 @@
 <script setup lang="ts">
-interface SetItem { id: number; weight: number; reps: number; skipped?: boolean }
+interface SetItem { id: number; weight: number; reps: number; skipped?: boolean; variationName?: string | null }
 
 const props = defineProps<{ sets: SetItem[] }>()
 const emit = defineEmits<{
@@ -144,6 +144,7 @@ function saveEdit(id: number) {
         <button type="button" class="set-val" :class="{ skipped: s.skipped }" @click="startEdit(s)">
           <template v-if="s.skipped">Пропуск</template>
           <template v-else>{{ s.weight }} × {{ s.reps }}</template>
+          <em v-if="s.variationName" class="set-var">{{ s.variationName }}</em>
         </button>
         <button type="button" class="row-btn" aria-label="Изменить" @click="startEdit(s)">
           <Icon name="lucide:pencil" />
@@ -224,6 +225,7 @@ function saveEdit(id: number) {
 
   &.skipped { color: var(--muted); font-style: italic; font-weight: 600; }
 }
+.set-var { margin-left: 8px; font-style: normal; font-weight: 600; font-size: 12px; color: var(--muted); }
 
 .edit-fields {
   flex: 1;

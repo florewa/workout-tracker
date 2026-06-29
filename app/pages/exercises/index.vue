@@ -45,11 +45,40 @@ interface ExerciseDetail {
   categoryId: number | null; categoryName: string | null; imageUrl: string | null
 }
 const detail = ref<ExerciseDetail | null>(null)
+interface Variation { id: number; name: string; isDefault: boolean }
+const detailVariations = ref<Variation[]>([])
+const newVariation = ref('')
+async function loadVariations(exId: number) {
+  try { detailVariations.value = await api.get<Variation[]>(`/api/exercises/${exId}/variations`) }
+  catch { detailVariations.value = [] }
+}
 async function openDetail(id: number) {
-  try { detail.value = await api.get<ExerciseDetail>(`/api/exercises/${id}`) }
-  catch { toast('Не удалось открыть упражнение', 'error') }
+  try {
+    detail.value = await api.get<ExerciseDetail>(`/api/exercises/${id}`)
+    await loadVariations(id)
+  } catch { toast('Не удалось открыть упражнение', 'error') }
 }
 function closeDetail() { detail.value = null }
+
+async function addVariation() {
+  const name = newVariation.value.trim()
+  if (!name || !detail.value) return
+  try {
+    await api.post(`/api/exercises/${detail.value.id}/variations`, { name })
+    newVariation.value = ''
+    await loadVariations(detail.value.id)
+  } catch { toast('Не удалось добавить вариацию', 'error') }
+}
+async function makeDefaultVariation(v: Variation) {
+  if (!detail.value || v.isDefault) return
+  try { await api.patch(`/api/variations/${v.id}`, { makeDefault: true }); await loadVariations(detail.value.id) }
+  catch { toast('Не удалось', 'error') }
+}
+async function removeVariation(v: Variation) {
+  if (!detail.value) return
+  try { await api.del(`/api/variations/${v.id}`); await loadVariations(detail.value.id) }
+  catch { toast('Не удалось удалить', 'error') }
+}
 const detailSteps = computed(() => (detail.value?.instructions ?? '').split('\n').map(s => s.trim()).filter(Boolean))
 const similar = computed(() => {
   const d = detail.value
@@ -288,6 +317,24 @@ async function deleteCategory(id: number) {
                   <Icon v-else name="lucide:dumbbell" class="similar-fallback" />
                   <span class="similar-name">{{ s.name }}</span>
                 </button>
+              </div>
+            </div>
+
+            <div class="variations-block">
+              <span class="vb-title">Вариации (снаряды)</span>
+              <p class="vb-hint">Один движок, разные снаряды (гантели/тренажёр). При записи выбираешь, какой делаешь.</p>
+              <div v-if="detailVariations.length" class="vb-list">
+                <div v-for="v in detailVariations" :key="v.id" class="vb-row">
+                  <button type="button" class="vb-name" :class="{ default: v.isDefault }" @click="makeDefaultVariation(v)">
+                    <Icon v-if="v.isDefault" name="lucide:star" class="vb-star" />
+                    {{ v.name }}
+                  </button>
+                  <button type="button" class="vb-del" aria-label="Удалить вариацию" @click="removeVariation(v)"><Icon name="lucide:x" /></button>
+                </div>
+              </div>
+              <div class="vb-add">
+                <input v-model="newVariation" type="text" class="field-input" placeholder="Напр. на тренажёре" @keydown.enter="addVariation" />
+                <button type="button" class="vb-add-btn" @click="addVariation"><Icon name="lucide:plus" /></button>
               </div>
             </div>
 
@@ -640,6 +687,25 @@ async function deleteCategory(id: number) {
 }
 .similar-fallback { width: 96px; height: 64px; display: grid; place-items: center; font-size: 24px; color: var(--muted); }
 .similar-name { padding: 6px; font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.2; text-align: left; }
+
+.variations-block { display: flex; flex-direction: column; gap: var(--space-2); }
+.vb-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.vb-hint { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.35; }
+.vb-list { display: flex; flex-direction: column; gap: 6px; }
+.vb-row { display: flex; align-items: center; gap: 6px; }
+.vb-name {
+  flex: 1; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 var(--space-3);
+  border: 1px solid var(--glass-edge-flat); border-radius: var(--radius-md);
+  background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 600; text-align: left; cursor: pointer;
+  &.default { border-color: var(--accent); }
+}
+.vb-star { color: var(--accent); font-size: 14px; }
+.vb-del { width: 34px; height: 34px; border: 0; background: none; color: var(--muted); cursor: pointer; flex-shrink: 0; }
+.vb-add { display: flex; gap: 6px; }
+.vb-add-btn {
+  width: 44px; flex-shrink: 0; border: 0; border-radius: var(--radius-md);
+  background: var(--accent); color: var(--accent-text); display: grid; place-items: center; cursor: pointer;
+}
 
 .sheet-enter-active, .sheet-leave-active { transition: opacity 0.2s ease; }
 .sheet-enter-from, .sheet-leave-to { opacity: 0; }

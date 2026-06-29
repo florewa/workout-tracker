@@ -3,7 +3,8 @@ interface MemberLite { id: number; name: string }
 interface DayExercise { id: number; name: string; order: number; targetSets: number | null; targetReps: string | null }
 interface SetRow {
   id: number; userId: number; exerciseId: number; exerciseName: string
-  setOrder: number; weight: number; reps: number; skipped: boolean; note: string | null
+  setOrder: number; weight: number; reps: number; skipped: boolean
+  variationId: number | null; variationName: string | null; note: string | null
 }
 interface WorkoutData {
   workout: { id: number; date: string; dayId: number | null; finishedAt: string | null; recordMode: 'each' | 'single' }
@@ -174,14 +175,14 @@ function advance(exId: number) {
 // Steppers + last-time prefill
 const weight = ref(20)
 const reps = ref(10)
-const prefill = ref<{ weight: number; reps: number; source: 'last' | 'default' } | null>(null)
+const prefill = ref<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(null)
 
 watch(
   [activeExerciseId, selectedMemberId],
   async ([exId, memId]) => {
     if (!exId || !memId) { prefill.value = null; return }
     try {
-      prefill.value = await api.get<{ weight: number; reps: number; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId })
+      prefill.value = await api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId })
     } catch {
       prefill.value = null
     }
@@ -189,6 +190,25 @@ watch(
   },
   { immediate: true },
 )
+
+// ── Вариации упражнения (снаряд) ──
+interface Variation { id: number; name: string; isDefault: boolean }
+const variations = ref<Variation[]>([])
+const selectedVariationId = ref<number | null>(null)
+
+watch(activeExerciseId, async (exId) => {
+  if (!exId) { variations.value = []; return }
+  try { variations.value = await api.get<Variation[]>(`/api/exercises/${exId}/variations`) }
+  catch { variations.value = [] }
+}, { immediate: true })
+
+// выбор вариации: последняя у участника → дефолтная → первая
+watch([variations, prefill], () => {
+  if (!variations.value.length) { selectedVariationId.value = null; return }
+  const fromPrefill = prefill.value?.variationId
+  if (fromPrefill && variations.value.some(v => v.id === fromPrefill)) { selectedVariationId.value = fromPrefill; return }
+  selectedVariationId.value = (variations.value.find(v => v.isDefault) ?? variations.value[0]).id
+}, { immediate: true })
 
 function stepWeight(delta: number) { weight.value = Math.max(0, Math.round((weight.value + delta) * 4) / 4) }
 function stepReps(delta: number) { reps.value = Math.max(0, reps.value + delta) }
@@ -220,7 +240,9 @@ async function record() {
   busy.value = true
   try {
     await api.post('/api/sets', {
-      workoutId: id, userId: selectedMemberId.value, exerciseId: exId, weight: weight.value, reps: reps.value,
+      workoutId: id, userId: selectedMemberId.value, exerciseId: exId,
+      variationId: variations.value.length ? selectedVariationId.value : null,
+      weight: weight.value, reps: reps.value,
     })
     await refresh()
     if (!wasComplete) advance(exId)
@@ -237,7 +259,9 @@ async function skip() {
   busy.value = true
   try {
     await api.post('/api/sets', {
-      workoutId: id, userId: selectedMemberId.value, exerciseId: exId, skipped: true,
+      workoutId: id, userId: selectedMemberId.value, exerciseId: exId,
+      variationId: variations.value.length ? selectedVariationId.value : null,
+      skipped: true,
     })
     await refresh()
     advance(exId)
@@ -394,6 +418,7 @@ async function cancel() {
           <span v-for="s in g.sets" :key="s.id" class="detail-set" :class="{ skipped: s.skipped }">
             <template v-if="s.skipped">пропуск</template>
             <template v-else><b>{{ s.weight }}</b><span class="mul">×</span>{{ s.reps }}</template>
+            <em v-if="s.variationName"> · {{ s.variationName }}</em>
             <em v-if="multiMember"> · {{ memberName(s.userId) }}</em>
           </span>
         </div>
@@ -458,6 +483,22 @@ async function cancel() {
         <p v-if="data && data.members.length > 1" class="whose">
           Подход за <b>{{ selectedMemberName }}</b>
         </p>
+
+        <div v-if="variations.length" class="variations">
+          <span class="variations-label">Вариация</span>
+          <div class="variations-chips">
+            <button
+              v-for="v in variations"
+              :key="v.id"
+              type="button"
+              class="member-chip"
+              :class="{ active: selectedVariationId === v.id }"
+              @click="selectedVariationId = v.id"
+            >
+              {{ v.name }}
+            </button>
+          </div>
+        </div>
 
         <p class="last-hint">
           <template v-if="prefill && prefill.source === 'last'">Прошлый раз: <b>{{ prefill.weight }}</b> × <b>{{ prefill.reps }}</b></template>
@@ -598,6 +639,12 @@ async function cancel() {
   color: var(--muted);
   b { color: var(--accent); font-weight: 700; }
 }
+
+.variations { display: flex; flex-direction: column; gap: var(--space-2); }
+.variations-label {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
+.variations-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .member-chip {
   display: inline-flex;

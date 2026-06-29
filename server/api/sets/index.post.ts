@@ -7,7 +7,7 @@ import { broadcastSetsChanged } from '~~/server/utils/realtime'
 
 export default defineEventHandler(async (event) => {
   const me = await requireUser(event)
-  const body = await readBody<{ workoutId: number; userId: number; exerciseId: number; weight?: number; reps?: number; skipped?: boolean; note?: string }>(event)
+  const body = await readBody<{ workoutId: number; userId: number; exerciseId: number; variationId?: number | null; weight?: number; reps?: number; skipped?: boolean; note?: string }>(event)
   for (const key of ['workoutId', 'userId', 'exerciseId'] as const) {
     if (typeof body?.[key] !== 'number') throw createError({ statusCode: 400, statusMessage: `Поле ${key} обязательно` })
   }
@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
     workoutId: body.workoutId,
     userId: body.userId,
     exerciseId: body.exerciseId,
+    variationId: typeof body.variationId === 'number' ? body.variationId : null,
     weight: skipped ? 0 : body.weight!,
     reps: skipped ? 0 : body.reps!,
     skipped,
