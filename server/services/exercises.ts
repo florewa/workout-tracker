@@ -22,6 +22,7 @@ export async function listExercises(
 export interface ExerciseFull {
   id: number
   name: string
+  nameEn: string | null
   muscleGroup: string | null
   categoryId: number | null
   categoryName: string | null
@@ -40,6 +41,7 @@ export async function listExercisesFull(
     .select({
       id: exercises.id,
       name: exercises.name,
+      nameEn: exercises.nameEn,
       muscleGroup: exercises.muscleGroup,
       categoryId: exercises.categoryId,
       categoryName: categories.name,

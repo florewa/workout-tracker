@@ -1,7 +1,7 @@
 <script setup lang="ts">
 interface Category { id: number; name: string; order: number }
 interface ExerciseRow {
-  id: number; name: string; muscleGroup: string | null
+  id: number; name: string; nameEn: string | null; muscleGroup: string | null
   categoryId: number | null; categoryName: string | null; imageUrl: string | null
 }
 
@@ -25,9 +25,15 @@ const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return (exercises.value ?? []).filter(e =>
     (activeCategory.value == null || e.categoryId === activeCategory.value)
-    && (!q || e.name.toLowerCase().includes(q)),
+    && (!q || e.name.toLowerCase().includes(q) || (e.nameEn ?? '').toLowerCase().includes(q)),
   )
 })
+
+// порционный показ — в банке сотни упражнений
+const PAGE = 60
+const limit = ref(PAGE)
+watch([search, activeCategory], () => { limit.value = PAGE })
+const visible = computed(() => filtered.value.slice(0, limit.value))
 
 function goBack() { navigateTo('/select') }
 
@@ -178,18 +184,23 @@ async function deleteCategory(id: number) {
     </div>
 
     <div class="scroll">
-      <div v-if="filtered.length" class="grid">
-        <button v-for="e in filtered" :key="e.id" type="button" class="card glass" @click="openEdit(e)">
-          <div class="thumb">
-            <img v-if="e.imageUrl" :src="e.imageUrl" :alt="e.name" loading="lazy" />
-            <Icon v-else name="lucide:dumbbell" class="thumb-fallback" />
-          </div>
-          <div class="card-body">
-            <span class="card-name">{{ e.name }}</span>
-            <span v-if="e.categoryName || e.muscleGroup" class="card-sub">{{ e.categoryName || e.muscleGroup }}</span>
-          </div>
+      <template v-if="filtered.length">
+        <div class="grid">
+          <button v-for="e in visible" :key="e.id" type="button" class="card glass" @click="openEdit(e)">
+            <div class="thumb">
+              <img v-if="e.imageUrl" :src="e.imageUrl" :alt="e.name" loading="lazy" />
+              <Icon v-else name="lucide:dumbbell" class="thumb-fallback" />
+            </div>
+            <div class="card-body">
+              <span class="card-name">{{ e.name }}</span>
+              <span v-if="e.muscleGroup || e.categoryName" class="card-sub">{{ e.muscleGroup || e.categoryName }}</span>
+            </div>
+          </button>
+        </div>
+        <button v-if="filtered.length > limit" type="button" class="more" @click="limit += PAGE">
+          Показать ещё ({{ filtered.length - limit }})
         </button>
-      </div>
+      </template>
       <p v-else class="empty">Ничего не найдено</p>
     </div>
 
@@ -376,6 +387,20 @@ async function deleteCategory(id: number) {
 .card-sub { font-size: 12px; color: var(--muted); }
 
 .empty { text-align: center; color: var(--muted); font-size: 14px; padding: var(--space-6) 0; }
+
+.more {
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--glass-edge-flat);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  &:active { background: var(--surface); }
+}
 
 .fab {
   position: fixed;

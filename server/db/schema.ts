@@ -32,9 +32,15 @@ export const categories = pgTable('categories', {
 export const exercises = pgTable('exercises', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 200 }).notNull().unique(),
-  muscleGroup: varchar('muscle_group', { length: 120 }),
+  nameEn: varchar('name_en', { length: 200 }), // оригинальное англ. имя (связка с датасетом)
+  muscleGroup: varchar('muscle_group', { length: 120 }), // RU-подпись «что качает»
   categoryId: integer('category_id').references((): AnyPgColumn => categories.id),
   imageUrl: text('image_url'),
+  primaryMuscles: text('primary_muscles').array(), // канонические ключи мышц (для схемы/фильтра)
+  secondaryMuscles: text('secondary_muscles').array(),
+  equipment: varchar('equipment', { length: 60 }),
+  instructions: text('instructions'),
+  source: varchar('source', { length: 40 }), // 'custom' | 'free-exercise-db'
   defaultReps: varchar('default_reps', { length: 40 }),
   defaultTempo: varchar('default_tempo', { length: 20 }),
   isArchived: boolean('is_archived').notNull().default(false),

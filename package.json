@@ -15,6 +15,7 @@
     "db:migrate:test": "drizzle-kit migrate --config=drizzle.config.test.ts",
     "import": "tsx scripts/import-xlsx.ts",
     "reset:baseline": "tsx scripts/reset-baseline.ts",
+    "import:exercises": "tsx scripts/import-free-exercise-db.ts",
     "normalize": "tsx scripts/normalize-exercises.ts",
     "backfill:weekday": "tsx scripts/backfill-weekday.ts",
     "postinstall": "nuxt prepare"
