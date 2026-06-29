@@ -56,6 +56,8 @@ export const workouts = pgTable('workouts', {
   createdBy: integer('created_by').references(() => users.id),
   dayId: integer('day_id').references(() => programDays.id),
   note: text('note'),
+  // 'each' — каждый записывает сам; 'single' — один ведёт за всех (ротация)
+  recordMode: varchar('record_mode', { length: 10 }).notNull().default('each'),
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
 }, (t) => ({
@@ -77,6 +79,8 @@ export const sets = pgTable('sets', {
   setOrder: integer('set_order').notNull(),
   weight: real('weight').notNull(),
   reps: integer('reps').notNull(),
+  // Пропущенный подход: занимает позицию в ротации, но не идёт в статистику
+  skipped: boolean('skipped').notNull().default(false),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
