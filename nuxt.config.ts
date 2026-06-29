@@ -5,6 +5,8 @@ export default defineNuxtConfig({
   ssr: false,
   devtools: { enabled: true },
   typescript: { strict: true },
+  // Живая синхронизация совместной тренировки между участниками
+  nitro: { experimental: { websocket: true } },
   modules: ['@pinia/nuxt', '@nuxt/icon'],
   icon: {
     clientBundle: { scan: true, includeCustomCollections: true },
@@ -16,7 +18,7 @@ export default defineNuxtConfig({
   ],
   app: {
     head: {
-      meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }],
+      meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover' }],
       link: [{ rel: 'icon', href: '/icon.svg', type: 'image/svg+xml' }],
       script: [{ src: 'https://telegram.org/js/telegram-web-app.js' }],
     },

@@ -9,6 +9,8 @@ html, body {
   color: var(--text);
   font-family: 'Manrope Variable', 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* двойной тап по кнопкам не должен зумить интерфейс */
+  touch-action: manipulation;
 }
 
 /* Ambient glow behind everything — gives backdrop-blur something to read */
@@ -21,7 +23,7 @@ body::before {
   pointer-events: none;
 }
 
-button { font: inherit; }
+button { font: inherit; touch-action: manipulation; }
 a { color: inherit; }
 
 /* ── Glass surface ──
