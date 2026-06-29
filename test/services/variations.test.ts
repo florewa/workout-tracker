@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { sets } from '~~/server/db/schema'
-import { createWorkout } from '~~/server/services/workouts'
+import { sets, exercises } from '~~/server/db/schema'
+import { createWorkout, getWorkout } from '~~/server/services/workouts'
 import { addSet } from '~~/server/services/sets'
 import { listVariations, addVariation, setDefaultVariation, deleteVariation } from '~~/server/services/variations'
 
@@ -21,6 +21,19 @@ describe('variations', () => {
     list = await listVariations(testDb, benchId)
     expect(list.find(v => v.id === a.id)?.isDefault).toBe(false)
     expect(list.find(v => v.id === b.id)?.isDefault).toBe(true)
+  })
+
+  it('вариация-упражнение: подход под альтернативу, слот = основное', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const [alt] = await testDb.insert(exercises).values({ name: 'Жим гантелей (альт)' }).returning({ id: exercises.id })
+    const v = await addVariation(testDb, benchId, 'Гантели', alt.id)
+    const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: alt.id, variationId: v.id, weight: 20, reps: 12 })
+
+    const w = await getWorkout(testDb, wId)
+    const s = w!.sets[0]
+    expect(s.exerciseId).toBe(alt.id) // прогресс — под альтернативу
+    expect(s.slotExerciseId).toBe(benchId) // но в тренировке показывается в слоте основного
   })
 
   it('удаление вариации обнуляет variation_id у подходов', async () => {

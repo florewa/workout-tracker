@@ -7,8 +7,9 @@ export default defineEventHandler(async (event) => {
   await requireUser(event)
   const id = Number(getRouterParam(event, 'id'))
   if (!Number.isInteger(id) || id <= 0) throw createError({ statusCode: 400, statusMessage: 'Неверный id' })
-  const body = await readBody<{ name: string }>(event)
+  const body = await readBody<{ name: string; altExerciseId?: number | null }>(event)
   const name = body?.name?.trim()
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Название вариации обязательно' })
-  return addVariation(db, id, name)
+  const altExerciseId = typeof body.altExerciseId === 'number' ? body.altExerciseId : null
+  return addVariation(db, id, name, altExerciseId)
 })

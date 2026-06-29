@@ -4,22 +4,31 @@ import { exerciseVariations, sets } from '~~/server/db/schema'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
 
-export async function listVariations(executor: Executor, exerciseId: number): Promise<{ id: number; name: string; isDefault: boolean }[]> {
+export async function listVariations(executor: Executor, exerciseId: number): Promise<{ id: number; name: string; altExerciseId: number | null; isDefault: boolean }[]> {
   return executor
-    .select({ id: exerciseVariations.id, name: exerciseVariations.name, isDefault: exerciseVariations.isDefault })
+    .select({ id: exerciseVariations.id, name: exerciseVariations.name, altExerciseId: exerciseVariations.altExerciseId, isDefault: exerciseVariations.isDefault })
     .from(exerciseVariations)
     .where(eq(exerciseVariations.exerciseId, exerciseId))
     .orderBy(asc(exerciseVariations.id))
 }
 
-export async function addVariation(executor: Executor, exerciseId: number, name: string): Promise<{ id: number }> {
+export async function getVariation(executor: Executor, id: number): Promise<{ exerciseId: number; altExerciseId: number | null } | null> {
+  const [row] = await executor
+    .select({ exerciseId: exerciseVariations.exerciseId, altExerciseId: exerciseVariations.altExerciseId })
+    .from(exerciseVariations)
+    .where(eq(exerciseVariations.id, id))
+    .limit(1)
+  return row ?? null
+}
+
+export async function addVariation(executor: Executor, exerciseId: number, name: string, altExerciseId?: number | null): Promise<{ id: number }> {
   return executor.transaction(async (tx) => {
     const [{ cnt }] = await tx
       .select({ cnt: sql<number>`count(*)`.mapWith(Number) })
       .from(exerciseVariations)
       .where(eq(exerciseVariations.exerciseId, exerciseId))
     const [row] = await tx.insert(exerciseVariations)
-      .values({ exerciseId, name: name.trim(), isDefault: cnt === 0 }) // первая вариация — дефолтная
+      .values({ exerciseId, name: name.trim(), altExerciseId: altExerciseId ?? null, isDefault: cnt === 0 }) // первая вариация — дефолтная
       .returning({ id: exerciseVariations.id })
     return row
   })

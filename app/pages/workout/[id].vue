@@ -4,7 +4,7 @@ interface DayExercise { id: number; name: string; order: number; targetSets: num
 interface SetRow {
   id: number; userId: number; exerciseId: number; exerciseName: string
   setOrder: number; weight: number; reps: number; skipped: boolean
-  variationId: number | null; variationName: string | null; note: string | null
+  variationId: number | null; variationName: string | null; slotExerciseId: number; note: string | null
 }
 interface WorkoutData {
   workout: { id: number; date: string; dayId: number | null; finishedAt: string | null; recordMode: 'each' | 'single' }
@@ -95,7 +95,7 @@ function targetLabel(ex: DayExercise): string {
 // Sets of the active exercise for the selected member
 const currentSets = computed(() =>
   (data.value?.sets ?? [])
-    .filter(s => s.exerciseId === activeExerciseId.value && s.userId === selectedMemberId.value)
+    .filter(s => s.slotExerciseId === activeExerciseId.value && s.userId === selectedMemberId.value)
     .sort((a, b) => a.setOrder - b.setOrder),
 )
 
@@ -112,7 +112,7 @@ const rotation = computed(() => recordMode.value === 'single' && members.value.l
 
 function doneCountFor(exId: number, memberId: number | null): number {
   if (memberId == null) return 0
-  return (data.value?.sets ?? []).filter(s => s.exerciseId === exId && s.userId === memberId).length
+  return (data.value?.sets ?? []).filter(s => s.slotExerciseId === exId && s.userId === memberId).length
 }
 
 // Done-count badge per exercise for the selected member
@@ -192,7 +192,7 @@ watch(
 )
 
 // ── Вариации упражнения (снаряд) ──
-interface Variation { id: number; name: string; isDefault: boolean }
+interface Variation { id: number; name: string; altExerciseId: number | null; isDefault: boolean }
 const variations = ref<Variation[]>([])
 const selectedVariationId = ref<number | null>(null)
 

@@ -92,6 +92,8 @@ export const exerciseVariations = pgTable('exercise_variations', {
   id: serial('id').primaryKey(),
   exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
   name: varchar('name', { length: 120 }).notNull(),
+  // если задано — вариация это другое упражнение из банка (подход пишется под него)
+  altExerciseId: integer('alt_exercise_id').references((): AnyPgColumn => exercises.id),
   isDefault: boolean('is_default').notNull().default(false),
 })
 

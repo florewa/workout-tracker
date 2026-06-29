@@ -58,7 +58,7 @@ async function openDetail(id: number) {
     await loadVariations(id)
   } catch { toast('Не удалось открыть упражнение', 'error') }
 }
-function closeDetail() { detail.value = null }
+function closeDetail() { detail.value = null; pickingAlt.value = false; altSearch.value = '' }
 
 async function addVariation() {
   const name = newVariation.value.trim()
@@ -69,6 +69,25 @@ async function addVariation() {
     await loadVariations(detail.value.id)
   } catch { toast('Не удалось добавить вариацию', 'error') }
 }
+const pickingAlt = ref(false)
+const altSearch = ref('')
+const altCandidates = computed(() => {
+  const q = altSearch.value.trim().toLowerCase()
+  const selfId = detail.value?.id
+  return (exercises.value ?? [])
+    .filter(e => e.id !== selfId && (!q || e.name.toLowerCase().includes(q) || (e.nameEn ?? '').toLowerCase().includes(q)))
+    .slice(0, 40)
+})
+async function addVariationFromExercise(e: ExerciseRow) {
+  if (!detail.value) return
+  try {
+    await api.post(`/api/exercises/${detail.value.id}/variations`, { name: e.name, altExerciseId: e.id })
+    pickingAlt.value = false
+    altSearch.value = ''
+    await loadVariations(detail.value.id)
+  } catch { toast('Не удалось добавить', 'error') }
+}
+
 async function makeDefaultVariation(v: Variation) {
   if (!detail.value || v.isDefault) return
   try { await api.patch(`/api/variations/${v.id}`, { makeDefault: true }); await loadVariations(detail.value.id) }
@@ -333,8 +352,24 @@ async function deleteCategory(id: number) {
                 </div>
               </div>
               <div class="vb-add">
-                <input v-model="newVariation" type="text" class="field-input" placeholder="Напр. на тренажёре" @keydown.enter="addVariation" />
+                <input v-model="newVariation" type="text" class="field-input" placeholder="Снаряд текстом (напр. Гантели)" @keydown.enter="addVariation" />
                 <button type="button" class="vb-add-btn" @click="addVariation"><Icon name="lucide:plus" /></button>
+              </div>
+              <button type="button" class="vb-alt-toggle" @click="pickingAlt = !pickingAlt">
+                <Icon name="lucide:replace" /> {{ pickingAlt ? 'Скрыть' : 'Похожее упражнение из банка' }}
+              </button>
+              <div v-if="pickingAlt" class="vb-alt">
+                <input v-model="altSearch" type="search" class="field-input" placeholder="Поиск упражнения" />
+                <div class="vb-alt-list">
+                  <button v-for="e in altCandidates" :key="e.id" type="button" class="vb-alt-row" @click="addVariationFromExercise(e)">
+                    <div class="vb-alt-thumb">
+                      <img v-if="e.imageUrl" :src="e.imageUrl" :alt="e.name" loading="lazy" />
+                      <Icon v-else name="lucide:dumbbell" />
+                    </div>
+                    <span class="vb-alt-name">{{ e.name }}</span>
+                    <Icon name="lucide:plus" class="vb-alt-add" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -664,7 +699,7 @@ async function deleteCategory(id: number) {
 }
 
 .similar { display: flex; flex-direction: column; gap: var(--space-2); }
-.similar-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.similar-title { font-size: 15px; font-weight: 700; color: var(--text); }
 .similar-row {
   display: flex;
   gap: var(--space-2);
@@ -689,7 +724,7 @@ async function deleteCategory(id: number) {
 .similar-name { padding: 6px; font-size: 11px; font-weight: 600; color: var(--text); line-height: 1.2; text-align: left; }
 
 .variations-block { display: flex; flex-direction: column; gap: var(--space-2); }
-.vb-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.vb-title { font-size: 15px; font-weight: 700; color: var(--text); }
 .vb-hint { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.35; }
 .vb-list { display: flex; flex-direction: column; gap: 6px; }
 .vb-row { display: flex; align-items: center; gap: 6px; }
@@ -702,6 +737,24 @@ async function deleteCategory(id: number) {
 .vb-star { color: var(--accent); font-size: 14px; }
 .vb-del { width: 34px; height: 34px; border: 0; background: none; color: var(--muted); cursor: pointer; flex-shrink: 0; }
 .vb-add { display: flex; gap: 6px; }
+.vb-add .field-input { flex: 1; min-width: 0; }
+.vb-alt-toggle {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  border: 0; background: none; padding: 2px 0; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.vb-alt { display: flex; flex-direction: column; gap: 6px; }
+.vb-alt-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.vb-alt-row {
+  display: flex; align-items: center; gap: var(--space-2); padding: 5px;
+  border: 0; border-radius: var(--radius-md); background: var(--surface-2); cursor: pointer; text-align: left;
+}
+.vb-alt-thumb {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--radius-sm); overflow: hidden;
+  background: var(--surface); display: grid; place-items: center; color: var(--muted);
+  img { width: 100%; height: 100%; object-fit: cover; }
+}
+.vb-alt-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vb-alt-add { color: var(--accent); flex-shrink: 0; }
 .vb-add-btn {
   width: 44px; flex-shrink: 0; border: 0; border-radius: var(--radius-md);
   background: var(--accent); color: var(--accent-text); display: grid; place-items: center; cursor: pointer;
