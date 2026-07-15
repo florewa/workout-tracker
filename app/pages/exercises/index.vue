@@ -2,7 +2,8 @@
 interface Category { id: number; name: string; order: number }
 interface ExerciseRow {
   id: number; name: string; nameEn: string | null; muscleGroup: string | null
-  categoryId: number | null; categoryName: string | null; imageUrl: string | null
+  primaryMuscles: string[] | null; categoryId: number | null; categoryName: string | null
+  imageUrl: string | null; isFavorite: boolean
 }
 
 const api = useApi()
@@ -24,11 +25,13 @@ const { data: exercises, refresh: refreshExercises } = await useAsyncData(
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return (exercises.value ?? []).filter(e =>
-    (activeCategory.value == null || e.categoryId === activeCategory.value)
-    && (activeMuscle.value == null || (e.primaryMuscles ?? []).includes(activeMuscle.value))
-    && (!q || e.name.toLowerCase().includes(q) || (e.nameEn ?? '').toLowerCase().includes(q)),
-  )
+  return (exercises.value ?? [])
+    .filter(e =>
+      (activeCategory.value == null || e.categoryId === activeCategory.value)
+      && (activeMuscle.value == null || (e.primaryMuscles ?? []).includes(activeMuscle.value))
+      && (!q || e.name.toLowerCase().includes(q) || (e.nameEn ?? '').toLowerCase().includes(q)),
+    )
+    .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || a.name.localeCompare(b.name, 'ru'))
 })
 
 // порционный показ — в банке сотни упражнений
@@ -42,7 +45,7 @@ interface ExerciseDetail {
   id: number; name: string; nameEn: string | null; muscleGroup: string | null
   primaryMuscles: string[] | null; secondaryMuscles: string[] | null
   equipment: string | null; instructions: string | null; source: string | null
-  categoryId: number | null; categoryName: string | null; imageUrl: string | null
+  categoryId: number | null; categoryName: string | null; imageUrl: string | null; isFavorite: boolean
 }
 const detail = ref<ExerciseDetail | null>(null)
 interface Variation { id: number; name: string; isDefault: boolean }
@@ -59,6 +62,30 @@ async function openDetail(id: number) {
   } catch { toast('Не удалось открыть упражнение', 'error') }
 }
 function closeDetail() { detail.value = null; pickingAlt.value = false; altSearch.value = '' }
+
+const favoriteSavingId = ref<number | null>(null)
+function applyFavorite(id: number, favorite: boolean) {
+  const row = exercises.value?.find(item => item.id === id)
+  if (row) row.isFavorite = favorite
+  if (detail.value?.id === id) detail.value.isFavorite = favorite
+}
+async function toggleFavorite(id: number) {
+  if (favoriteSavingId.value != null) return
+  const row = exercises.value?.find(item => item.id === id)
+  const current = row?.isFavorite ?? (detail.value?.id === id && detail.value.isFavorite)
+  const next = !current
+  favoriteSavingId.value = id
+  applyFavorite(id, next)
+  try {
+    if (next) await api.put(`/api/exercises/${id}/favorite`)
+    else await api.del(`/api/exercises/${id}/favorite`)
+  } catch {
+    applyFavorite(id, !next)
+    toast('Не удалось изменить избранное', 'error')
+  } finally {
+    favoriteSavingId.value = null
+  }
+}
 
 async function addVariation() {
   const name = newVariation.value.trim()
@@ -279,16 +306,28 @@ async function deleteCategory(id: number) {
     <div class="scroll">
       <template v-if="filtered.length">
         <div class="grid">
-          <button v-for="e in visible" :key="e.id" type="button" class="card glass" @click="openDetail(e.id)">
-            <div class="thumb">
-              <img v-if="e.imageUrl" :src="e.imageUrl" :alt="e.name" loading="lazy" />
-              <Icon v-else name="lucide:dumbbell" class="thumb-fallback" />
-            </div>
-            <div class="card-body">
-              <span class="card-name">{{ e.name }}</span>
-              <span v-if="e.muscleGroup || e.categoryName" class="card-sub">{{ e.muscleGroup || e.categoryName }}</span>
-            </div>
-          </button>
+          <div v-for="e in visible" :key="e.id" class="card glass">
+            <button type="button" class="card-open" @click="openDetail(e.id)">
+              <div class="thumb">
+                <img v-if="e.imageUrl" :src="e.imageUrl" :alt="e.name" loading="lazy" />
+                <Icon v-else name="lucide:dumbbell" class="thumb-fallback" />
+              </div>
+              <div class="card-body">
+                <span class="card-name">{{ e.name }}</span>
+                <span v-if="e.muscleGroup || e.categoryName" class="card-sub">{{ e.muscleGroup || e.categoryName }}</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              class="favorite-btn"
+              :class="{ active: e.isFavorite }"
+              :aria-label="e.isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+              :disabled="favoriteSavingId === e.id"
+              @click="toggleFavorite(e.id)"
+            >
+              <Icon name="lucide:star" />
+            </button>
+          </div>
         </div>
         <button v-if="filtered.length > limit" type="button" class="more" @click="limit += PAGE">
           Показать ещё ({{ filtered.length - limit }})
@@ -308,7 +347,17 @@ async function deleteCategory(id: number) {
           <div class="sheet glass">
             <div class="sheet-head">
               <h2 class="sheet-title">{{ detail.name }}</h2>
-              <button type="button" class="sheet-close" @click="closeDetail"><Icon name="lucide:x" /></button>
+              <button
+                type="button"
+                class="sheet-favorite"
+                :class="{ active: detail.isFavorite }"
+                :aria-label="detail.isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+                :disabled="favoriteSavingId === detail.id"
+                @click="toggleFavorite(detail.id)"
+              >
+                <Icon name="lucide:star" />
+              </button>
+              <button type="button" class="sheet-close" aria-label="Закрыть" @click="closeDetail"><Icon name="lucide:x" /></button>
             </div>
 
             <img v-if="detail.imageUrl" :src="detail.imageUrl" :alt="detail.name" class="detail-image" />
@@ -540,10 +589,21 @@ async function deleteCategory(id: number) {
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
+  text-align: left;
+}
+.card-open {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  background: transparent;
   text-align: left;
   cursor: pointer;
 }
@@ -559,6 +619,25 @@ async function deleteCategory(id: number) {
 .card-body { padding: var(--space-3); display: flex; flex-direction: column; gap: 2px; }
 .card-name { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.2; }
 .card-sub { font-size: 12px; color: var(--muted); }
+.favorite-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--glass-edge-flat);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  &.active { color: #ffd23f; border-color: color-mix(in srgb, #ffd23f 55%, transparent); }
+  &.active :deep(svg) { fill: currentColor; }
+  &:disabled { opacity: 0.6; }
+}
 
 .empty { text-align: center; color: var(--muted); font-size: 14px; padding: var(--space-6) 0; }
 
@@ -616,8 +695,14 @@ async function deleteCategory(id: number) {
   max-height: 88vh;
   overflow-y: auto;
 }
-.sheet-head { display: flex; align-items: center; justify-content: space-between; }
-.sheet-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 19px; color: var(--text); }
+.sheet-head { display: flex; align-items: center; gap: var(--space-2); }
+.sheet-title { flex: 1; min-width: 0; margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 19px; color: var(--text); }
+.sheet-favorite {
+  width: 32px; height: 32px; flex-shrink: 0; border: 0; border-radius: 50%;
+  background: var(--surface-2); color: var(--muted); display: grid; place-items: center; cursor: pointer;
+  &.active { color: #ffd23f; }
+  &.active :deep(svg) { fill: currentColor; }
+}
 .sheet-close { width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--muted); cursor: pointer; }
 
 .image-pick {

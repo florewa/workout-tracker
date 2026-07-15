@@ -1,7 +1,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import type { db as dbType } from '~~/server/db/client'
-import { sets, exercises } from '~~/server/db/schema'
+import { sets, exercises, favoriteExercises } from '~~/server/db/schema'
 import { e1rm, tonnage } from '~~/server/utils/metrics'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
@@ -18,6 +18,7 @@ export interface ExerciseProgress {
   points: ProgressPoint[]
   best: number
   sessions: number
+  isFavorite: boolean
 }
 
 function dayKey(d: Date): string {
@@ -44,10 +45,23 @@ export async function exerciseProgress(executor: Executor, userId: number): Prom
     .where(and(eq(sets.userId, userId), eq(sets.skipped, false)))
     .orderBy(asc(sets.createdAt), asc(sets.id))
 
-  const byExercise = new Map<number, { name: string; days: Map<string, { e1rm: number; volume: number }> }>()
+  const favorites = await executor
+    .select({ exerciseId: favoriteExercises.exerciseId, name: exercises.name })
+    .from(favoriteExercises)
+    .innerJoin(exercises, eq(exercises.id, favoriteExercises.exerciseId))
+    .where(eq(favoriteExercises.userId, userId))
+
+  const byExercise = new Map<number, {
+    name: string
+    days: Map<string, { e1rm: number; volume: number }>
+    isFavorite: boolean
+  }>()
+  for (const favorite of favorites) {
+    byExercise.set(favorite.exerciseId, { name: favorite.name, days: new Map(), isFavorite: true })
+  }
   for (const r of rows) {
     let ex = byExercise.get(r.exerciseId)
-    if (!ex) { ex = { name: r.name, days: new Map() }; byExercise.set(r.exerciseId, ex) }
+    if (!ex) { ex = { name: r.name, days: new Map(), isFavorite: false }; byExercise.set(r.exerciseId, ex) }
     const key = dayKey(r.createdAt)
     const day = ex.days.get(key) ?? { e1rm: 0, volume: 0 }
     day.e1rm = Math.max(day.e1rm, e1rm(r.weight, r.reps))
@@ -64,10 +78,11 @@ export async function exerciseProgress(executor: Executor, userId: number): Prom
       exerciseId,
       name: ex.name,
       points,
-      best: Math.max(...points.map(p => p.e1rm)),
+      best: points.length ? Math.max(...points.map(p => p.e1rm)) : 0,
       sessions: points.length,
+      isFavorite: ex.isFavorite,
     })
   }
 
-  return result.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  return result.sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || a.name.localeCompare(b.name, 'ru'))
 }

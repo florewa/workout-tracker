@@ -16,8 +16,17 @@ interface CompetitionPayload {
     tonnage: { userId: number; value: number }[]
   }
 }
+interface PersonalProgress {
+  exerciseId: number
+  name: string
+  points: { date: string; e1rm: number; volume: number }[]
+  best: number
+  sessions: number
+  isFavorite: boolean
+}
 
 const api = useApi()
+const { toast } = useDialog()
 
 const PERIODS: { key: PeriodKey; short: string }[] = [
   { key: '1m', short: 'Мес' }, { key: '3m', short: '3 мес' }, { key: '6m', short: 'Полгода' },
@@ -34,6 +43,11 @@ const { data, pending } = await useAsyncData(
   () => api.get<CompetitionPayload>('/api/progress/competition', { period: period.value }),
   { server: false, watch: [period] },
 )
+const { data: personalProgress, refresh: refreshPersonalProgress } = await useAsyncData(
+  'personal-progress',
+  () => api.get<PersonalProgress[]>('/api/progress'),
+  { server: false },
+)
 
 const exercises = computed(() => data.value?.exercises ?? [])
 const selectedExerciseId = ref<number | null>(null)
@@ -45,6 +59,35 @@ watch(
   },
   { immediate: true },
 )
+const selectedExercise = computed(() => exercises.value.find(ex => ex.exerciseId === selectedExerciseId.value) ?? null)
+const favoriteProgress = computed(() => (personalProgress.value ?? []).filter(ex => ex.isFavorite))
+const selectedIsFavorite = computed(() =>
+  (personalProgress.value ?? []).some(ex => ex.exerciseId === selectedExerciseId.value && ex.isFavorite),
+)
+const favoriteSaving = ref(false)
+
+function personalSummary(exercise: PersonalProgress) {
+  const first = exercise.points[0]?.e1rm ?? 0
+  const current = exercise.points.at(-1)?.e1rm ?? 0
+  const delta = Math.round((current - first) * 10) / 10
+  const deltaPct = first > 0 ? Math.round((delta / first) * 1000) / 10 : 0
+  return { current, delta, deltaPct }
+}
+
+async function toggleSelectedFavorite() {
+  const exercise = selectedExercise.value
+  if (!exercise || favoriteSaving.value) return
+  favoriteSaving.value = true
+  try {
+    if (selectedIsFavorite.value) await api.del(`/api/exercises/${exercise.exerciseId}/favorite`)
+    else await api.put(`/api/exercises/${exercise.exerciseId}/favorite`)
+    await refreshPersonalProgress()
+  } catch {
+    toast('Не удалось изменить избранное', 'error')
+  } finally {
+    favoriteSaving.value = false
+  }
+}
 
 function pName(id: number): string {
   return data.value?.participants.find(p => p.id === id)?.name ?? ''
@@ -144,6 +187,38 @@ const medals = ['🥇', '🥈', '🥉']
     </header>
 
     <div class="scroll">
+      <section v-if="favoriteProgress.length" class="favorite-progress">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title"><Icon name="lucide:star" /> Мой избранный прогресс</h2>
+            <p class="section-note">Личные показатели за всё время</p>
+          </div>
+        </div>
+        <div class="favorite-cards">
+          <article v-for="exercise in favoriteProgress" :key="exercise.exerciseId" class="favorite-card glass">
+            <div class="favorite-card-head">
+              <span class="favorite-name">{{ exercise.name }}</span>
+              <Icon name="lucide:star" class="favorite-star" />
+            </div>
+            <template v-if="exercise.sessions">
+              <div class="favorite-metrics">
+                <div><span>Лучший e1RM</span><b>{{ exercise.best }} кг</b></div>
+                <div><span>Сейчас</span><b>{{ personalSummary(exercise).current }} кг</b></div>
+                <div>
+                  <span>Рост</span>
+                  <b :class="{ positive: personalSummary(exercise).delta > 0, negative: personalSummary(exercise).delta < 0 }">
+                    {{ personalSummary(exercise).delta > 0 ? '+' : '' }}{{ personalSummary(exercise).delta }} кг
+                    <small>({{ personalSummary(exercise).deltaPct > 0 ? '+' : '' }}{{ personalSummary(exercise).deltaPct }}%)</small>
+                  </b>
+                </div>
+              </div>
+              <span class="favorite-sessions">{{ exercise.sessions }} тренировок</span>
+            </template>
+            <p v-else class="favorite-empty">Пока нет записанных подходов</p>
+          </article>
+        </div>
+      </section>
+
       <template v-if="hasData">
         <!-- Селектор упражнения -->
         <div class="ex-strip">
@@ -158,6 +233,18 @@ const medals = ['🥇', '🥈', '🥉']
             {{ ex.name }}
           </button>
         </div>
+
+        <button
+          v-if="selectedExercise"
+          type="button"
+          class="selected-favorite"
+          :class="{ active: selectedIsFavorite }"
+          :disabled="favoriteSaving"
+          @click="toggleSelectedFavorite"
+        >
+          <Icon name="lucide:star" />
+          {{ selectedIsFavorite ? 'В избранном' : 'Добавить в избранное' }}
+        </button>
 
         <!-- Гонка роста -->
         <div v-if="race" class="card glass">
@@ -350,6 +437,77 @@ const medals = ['🥇', '🥈', '🥉']
   padding-bottom: var(--space-1);
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
+}
+
+.favorite-progress { display: flex; flex-direction: column; gap: var(--space-2); }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.section-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  svg { color: #ffd23f; fill: currentColor; }
+}
+.section-note { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+.favorite-cards {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(245px, 82%);
+  gap: var(--space-2);
+  overflow-x: auto;
+  /* Горизонтальный overflow режет тени по обеим осям. Даём тени место
+     внутри скролла и компенсируем его снаружи, не раздвигая секцию. */
+  margin: -20px 0 -36px;
+  padding: 20px 0 36px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+.favorite-card {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  scroll-snap-align: start;
+}
+.favorite-card-head { display: flex; align-items: flex-start; gap: var(--space-2); }
+.favorite-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.25; }
+.favorite-star { flex-shrink: 0; color: #ffd23f; fill: currentColor; }
+.favorite-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  span { font-size: 10px; color: var(--muted); }
+  b { font-size: 13px; color: var(--text); white-space: nowrap; }
+  small { display: block; font-size: 10px; font-weight: 600; }
+  .positive { color: var(--pr); }
+  .negative { color: var(--accent); }
+}
+.favorite-sessions { font-size: 11px; color: var(--muted); }
+.favorite-empty { margin: 0; font-size: 13px; color: var(--muted); }
+
+.selected-favorite {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--glass-edge-flat);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  &.active { color: #ffd23f; border-color: color-mix(in srgb, #ffd23f 45%, transparent); }
+  &.active svg { fill: currentColor; }
+  &:disabled { opacity: 0.6; }
 }
 
 .ex-pill {

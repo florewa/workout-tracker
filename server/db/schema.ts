@@ -48,6 +48,15 @@ export const exercises = pgTable('exercises', {
   aliasOf: integer('alias_of').references((): AnyPgColumn => exercises.id),
 })
 
+export const favoriteExercises = pgTable('favorite_exercises', {
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  exerciseId: integer('exercise_id').notNull().references(() => exercises.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.userId, t.exerciseId] }),
+  userIdx: index('favorite_exercises_user_idx').on(t.userId, t.createdAt),
+}))
+
 export const programDays = pgTable('program_days', {
   id: serial('id').primaryKey(),
   code: varchar('code', { length: 20 }).notNull().unique(),

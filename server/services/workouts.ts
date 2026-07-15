@@ -240,6 +240,7 @@ export async function getWorkout(executor: Executor, id: number) {
         skipped: sets.skipped,
         variationId: sets.variationId,
         variationName: exerciseVariations.name,
+        createdAt: sets.createdAt,
         // слот упражнения в тренировке: у вариации-альтернативы это основное упражнение
         slotExerciseId: sql<number>`coalesce(${exerciseVariations.exerciseId}, ${sets.exerciseId})`.mapWith(Number),
         note: sets.note,

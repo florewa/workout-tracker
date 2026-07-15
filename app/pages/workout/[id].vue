@@ -5,6 +5,7 @@ interface SetRow {
   id: number; userId: number; exerciseId: number; exerciseName: string
   setOrder: number; weight: number; reps: number; skipped: boolean
   variationId: number | null; variationName: string | null; slotExerciseId: number; note: string | null
+  createdAt: string
 }
 interface WorkoutData {
   workout: { id: number; date: string; dayId: number | null; finishedAt: string | null; recordMode: 'each' | 'single' }
@@ -60,12 +61,8 @@ watch(
 
 // Active exercise
 const activeExerciseId = ref<number | null>(null)
-watch(
-  exercises,
-  (list) => { if (list.length && activeExerciseId.value == null) activeExerciseId.value = list[0].id },
-  { immediate: true },
-)
 const activeExercise = computed(() => exercises.value.find(e => e.id === activeExerciseId.value) ?? null)
+const activeExerciseStorageKey = `workout:${id}:active-exercise`
 
 // При смене упражнения ставим активную пилюлю левым краём к левому краю ленты —
 // справа открывается остаток списка для удобного выбора следующего.
@@ -139,6 +136,50 @@ function isComplete(exId: number): boolean {
   if (rotation.value) return members.value.every(m => isMemberComplete(exId, m.id))
   return isMemberComplete(exId, selectedMemberId.value)
 }
+
+// При возврате в незавершённую тренировку сначала восстанавливаем точный выбор
+// на этом устройстве. Если локального состояния нет, ориентируемся на последний
+// записанный подход и при полностью закрытом упражнении открываем следующее.
+const activeExerciseInitialized = ref(false)
+watch(
+  [exercises, () => data.value?.sets, selectedMemberId, rotation],
+  () => {
+    const list = exercises.value
+    const rows = data.value?.sets
+    if (activeExerciseInitialized.value || !list.length || !rows || selectedMemberId.value == null) return
+
+    const storedId = import.meta.client ? Number(localStorage.getItem(activeExerciseStorageKey)) : NaN
+    if (Number.isInteger(storedId) && list.some(ex => ex.id === storedId)) {
+      activeExerciseId.value = storedId
+      activeExerciseInitialized.value = true
+      return
+    }
+
+    const relevantRows = rotation.value
+      ? rows
+      : rows.filter(row => row.userId === selectedMemberId.value)
+    const latest = [...relevantRows].sort((a, b) =>
+      Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id,
+    )[0]
+
+    let restoredId = latest?.slotExerciseId ?? list[0].id
+    if (latest && isComplete(restoredId)) {
+      const index = list.findIndex(ex => ex.id === restoredId)
+      restoredId = list.slice(index + 1).find(ex => !isComplete(ex.id))?.id
+        ?? list.find(ex => !isComplete(ex.id))?.id
+        ?? restoredId
+    }
+    activeExerciseId.value = restoredId
+    activeExerciseInitialized.value = true
+  },
+  { immediate: true },
+)
+
+watch(activeExerciseId, (exerciseId) => {
+  if (import.meta.client && exerciseId != null) {
+    localStorage.setItem(activeExerciseStorageKey, String(exerciseId))
+  }
+})
 
 // Следующий участник по кругу, у которого ещё не набрана цель (или null — все готовы)
 function nextIncompleteMember(exId: number, fromId: number | null): number | null {

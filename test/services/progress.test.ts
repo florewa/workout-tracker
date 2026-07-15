@@ -3,6 +3,7 @@ import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { sets, exercises } from '~~/server/db/schema'
 import { createWorkout } from '~~/server/services/workouts'
 import { exerciseProgress } from '~~/server/services/progress'
+import { setExerciseFavorite } from '~~/server/services/favorites'
 import { e1rm } from '~~/server/utils/metrics'
 
 beforeEach(async () => { await resetDb() })
@@ -26,6 +27,7 @@ describe('exerciseProgress', () => {
     expect(prog[0].points[1].e1rm).toBe(e1rm(70, 8))
     expect(prog[0].best).toBe(e1rm(70, 8))
     expect(prog[0].points[0].volume).toBe(850)
+    expect(prog[0].isFavorite).toBe(false)
   })
 
   it('пустой результат без подходов', async () => {
@@ -47,5 +49,27 @@ describe('exerciseProgress', () => {
     expect(prog).toHaveLength(1)
     expect(prog[0].exerciseId).toBe(benchId)
     expect(prog[0].sessions).toBe(2)
+  })
+
+  it('ставит избранные упражнения первыми и возвращает их даже без подходов', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const [squat] = await testDb.insert(exercises)
+      .values({ name: 'Приседания' })
+      .returning({ id: exercises.id })
+    await setExerciseFavorite(testDb, danil, squat.id, true)
+
+    const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await testDb.insert(sets).values({
+      workoutId: wId,
+      userId: danil,
+      exerciseId: benchId,
+      setOrder: 1,
+      weight: 60,
+      reps: 8,
+    })
+
+    const prog = await exerciseProgress(testDb, danil)
+    expect(prog.map(item => item.exerciseId)).toEqual([squat.id, benchId])
+    expect(prog[0]).toMatchObject({ isFavorite: true, sessions: 0, best: 0, points: [] })
   })
 })
