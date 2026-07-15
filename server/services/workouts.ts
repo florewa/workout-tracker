@@ -133,6 +133,7 @@ export async function listWorkouts(executor: Executor, opts: { limit?: number; m
       date: workouts.date,
       dayId: workouts.dayId,
       dayCode: programDays.code,
+      startedAt: workouts.startedAt,
       finishedAt: workouts.finishedAt,
       memberCount: sql<number>`count(distinct ${workoutMembers.userId})`.mapWith(Number),
       setCount: sql<number>`count(distinct ${sets.id})`.mapWith(Number),
@@ -219,6 +220,74 @@ export async function cancelEmptyWorkout(executor: Executor, id: number): Promis
   })
 }
 
+interface TimedSet {
+  id: number
+  userId: number
+  slotExerciseId: number
+  createdAt: Date
+}
+
+export interface ExerciseDuration {
+  userId: number
+  exerciseId: number
+  durationSeconds: number
+  startedAt: Date
+  finishedAt: Date
+}
+
+/**
+ * Считает время упражнения отдельно для каждого участника по хронологии его подходов.
+ * Интервал начинается с первого подхода и заканчивается переходом к следующему
+ * упражнению либо завершением тренировки. При возврате к упражнению интервалы
+ * суммируются.
+ */
+export function calculateExerciseDurations(
+  rows: TimedSet[],
+  workoutFinishedAt: Date | null,
+  now = new Date(),
+): ExerciseDuration[] {
+  const byUser = new Map<number, TimedSet[]>()
+  for (const row of rows) {
+    const userRows = byUser.get(row.userId) ?? []
+    userRows.push(row)
+    byUser.set(row.userId, userRows)
+  }
+
+  const result = new Map<string, ExerciseDuration>()
+  const addInterval = (userId: number, exerciseId: number, startedAt: Date, finishedAt: Date) => {
+    const safeFinishedAt = finishedAt < startedAt ? startedAt : finishedAt
+    const durationSeconds = Math.max(0, Math.round((safeFinishedAt.getTime() - startedAt.getTime()) / 1000))
+    const key = `${userId}:${exerciseId}`
+    const existing = result.get(key)
+    if (existing) {
+      existing.durationSeconds += durationSeconds
+      if (startedAt < existing.startedAt) existing.startedAt = startedAt
+      if (safeFinishedAt > existing.finishedAt) existing.finishedAt = safeFinishedAt
+      return
+    }
+    result.set(key, { userId, exerciseId, durationSeconds, startedAt, finishedAt: safeFinishedAt })
+  }
+
+  for (const [userId, userRows] of byUser) {
+    const ordered = [...userRows].sort((a, b) =>
+      a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id,
+    )
+    if (!ordered.length) continue
+
+    let exerciseId = ordered[0].slotExerciseId
+    let startedAt = ordered[0].createdAt
+    for (const row of ordered.slice(1)) {
+      if (row.slotExerciseId === exerciseId) continue
+      addInterval(userId, exerciseId, startedAt, row.createdAt)
+      exerciseId = row.slotExerciseId
+      startedAt = row.createdAt
+    }
+    addInterval(userId, exerciseId, startedAt, workoutFinishedAt ?? now)
+  }
+
+  return [...result.values()].sort((a, b) => a.userId - b.userId || a.startedAt.getTime() - b.startedAt.getTime())
+}
+
 export async function getWorkout(executor: Executor, id: number) {
   const [w] = await executor.select().from(workouts).where(eq(workouts.id, id)).limit(1)
   if (!w) return null
@@ -251,5 +320,17 @@ export async function getWorkout(executor: Executor, id: number) {
       .where(eq(sets.workoutId, id))
       .orderBy(sets.exerciseId, sets.setOrder),
   ])
-  return { workout: { id: w.id, date: w.date, dayId: w.dayId, finishedAt: w.finishedAt, recordMode: w.recordMode }, members, sets: rows }
+  return {
+    workout: {
+      id: w.id,
+      date: w.date,
+      dayId: w.dayId,
+      startedAt: w.startedAt ?? w.date,
+      finishedAt: w.finishedAt,
+      recordMode: w.recordMode,
+    },
+    members,
+    sets: rows,
+    exerciseDurations: calculateExerciseDurations(rows, w.finishedAt),
+  }
 }

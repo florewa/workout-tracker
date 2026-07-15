@@ -15,9 +15,12 @@ interface SetRow {
   createdAt: string
 }
 interface WorkoutData {
-  workout: { id: number; date: string; dayId: number | null; finishedAt: string | null; recordMode: 'each' | 'single' }
+  workout: { id: number; date: string; dayId: number | null; startedAt: string; finishedAt: string | null; recordMode: 'each' | 'single' }
   members: MemberLite[]
   sets: SetRow[]
+  exerciseDurations: Array<{
+    userId: number; exerciseId: number; durationSeconds: number; startedAt: string; finishedAt: string
+  }>
 }
 interface DayLite { id: number; code: string; title: string }
 interface DayDetail { day: { id: number; code: string; title: string }; exercises: DayExercise[] }
@@ -27,6 +30,8 @@ const api = useApi()
 const session = useSessionStore()
 const { toast, confirm } = useDialog()
 const id = Number(route.params.id)
+const now = ref(Date.now())
+let timerInterval: ReturnType<typeof setInterval> | undefined
 
 const { data, refresh } = await useAsyncData(
   `workout-${id}`,
@@ -182,6 +187,35 @@ watch(
   { immediate: true },
 )
 
+const elapsedSeconds = computed(() => {
+  const startedAt = data.value?.workout.startedAt
+  if (!startedAt) return 0
+  const end = data.value?.workout.finishedAt
+    ? Date.parse(data.value.workout.finishedAt)
+    : now.value
+  return Math.max(0, Math.floor((end - Date.parse(startedAt)) / 1000))
+})
+
+function formatTimer(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor(seconds % 3600 / 60)
+  const rest = seconds % 60
+  return hours > 0
+    ? [hours, minutes, rest].map(part => String(part).padStart(2, '0')).join(':')
+    : [minutes, rest].map(part => String(part).padStart(2, '0')).join(':')
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds} сек`
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor(seconds % 3600 / 60)
+  return [hours ? `${hours} ч` : '', minutes ? `${minutes} мин` : ''].filter(Boolean).join(' ')
+}
+
+function formatClock(iso: string): string {
+  return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
+
 watch(activeExerciseId, (exerciseId) => {
   if (import.meta.client && exerciseId != null) {
     localStorage.setItem(activeExerciseStorageKey, String(exerciseId))
@@ -326,8 +360,14 @@ function onPointerDown(e: PointerEvent) {
     a.blur()
   }
 }
-onMounted(() => document.addEventListener('pointerdown', onPointerDown))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown))
+onMounted(() => {
+  document.addEventListener('pointerdown', onPointerDown)
+  timerInterval = setInterval(() => { now.value = Date.now() }, 1000)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onPointerDown)
+  if (timerInterval) clearInterval(timerInterval)
+})
 
 const busy = ref(false)
 
@@ -420,8 +460,15 @@ const summaryDate = computed(() =>
 const summaryGroups = computed(() => {
   const map = new Map<number, { exerciseId: number; name: string; sets: SetRow[] }>()
   for (const s of data.value?.sets ?? []) {
-    let g = map.get(s.exerciseId)
-    if (!g) { g = { exerciseId: s.exerciseId, name: s.exerciseName, sets: [] }; map.set(s.exerciseId, g) }
+    let g = map.get(s.slotExerciseId)
+    if (!g) {
+      g = {
+        exerciseId: s.slotExerciseId,
+        name: exercises.value.find(exercise => exercise.id === s.slotExerciseId)?.name ?? s.exerciseName,
+        sets: [],
+      }
+      map.set(s.slotExerciseId, g)
+    }
     g.sets.push(s)
   }
   return [...map.values()].map(g => ({
@@ -430,15 +477,21 @@ const summaryGroups = computed(() => {
   }))
 })
 
+function exerciseDurations(exerciseId: number) {
+  return (data.value?.exerciseDurations ?? []).filter(item => item.exerciseId === exerciseId)
+}
+
 async function finish() {
   if (busy.value) return
   busy.value = true
   try {
     await api.patch(`/api/workouts/${id}`)
+    await refresh()
     justFinished.value = true
     finished.value = true
   } catch {
     toast('Не удалось завершить тренировку.', 'error')
+  } finally {
     busy.value = false
   }
 }
@@ -506,13 +559,27 @@ async function cancel() {
         <span class="stat-num">{{ Math.round(totalTonnage) }}</span>
         <span class="stat-label">кг тоннаж</span>
       </div>
+      <div class="stat">
+        <span class="stat-num stat-time">{{ formatDuration(elapsedSeconds) }}</span>
+        <span class="stat-label">длительность</span>
+      </div>
     </div>
+
+    <p v-if="data" class="summary-range">
+      <span><Icon name="lucide:play" /> {{ formatClock(data.workout.startedAt) }}</span>
+      <span v-if="data.workout.finishedAt"><Icon name="lucide:square" /> {{ formatClock(data.workout.finishedAt) }}</span>
+    </p>
 
     <div v-if="summaryGroups.length" class="detail">
       <div v-for="g in summaryGroups" :key="g.exerciseId" class="detail-ex glass">
         <div class="detail-head">
           <span class="detail-name">{{ g.name }}</span>
           <span class="detail-count">{{ g.sets.filter(s => !s.skipped).length }} подх.</span>
+        </div>
+        <div v-if="exerciseDurations(g.exerciseId).length" class="detail-times">
+          <span v-for="duration in exerciseDurations(g.exerciseId)" :key="duration.userId" class="detail-time">
+            <template v-if="multiMember">{{ memberName(duration.userId) }} · </template>{{ formatDuration(duration.durationSeconds) }}
+          </span>
         </div>
         <div class="detail-sets">
           <span v-for="s in g.sets" :key="s.id" class="detail-set" :class="{ skipped: s.skipped }">
@@ -534,7 +601,10 @@ async function cancel() {
   <!-- ── Recording ── -->
   <section v-else class="page">
     <header class="head">
-      <h1 class="screen-title">{{ dayTitle }}</h1>
+      <div class="head-title-row">
+        <h1 class="screen-title">{{ dayTitle }}</h1>
+        <span class="workout-timer" aria-label="Время тренировки"><Icon name="lucide:timer" /> {{ formatTimer(elapsedSeconds) }}</span>
+      </div>
       <p v-if="editing" class="edit-note"><Icon name="lucide:pencil" /> Редактирование завершённой тренировки</p>
       <div v-if="data && data.members.length > 1" class="members">
         <span class="members-label">Чей подход</span>
@@ -760,6 +830,28 @@ async function cancel() {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+.head-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.workout-timer {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .edit-note {
@@ -1097,7 +1189,22 @@ async function cancel() {
   color: var(--text);
 }
 
+.stat-time { font-size: 20px; line-height: 36px; }
+
 .stat-label { font-size: 12px; color: var(--muted); }
+
+.summary-range {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  color: var(--muted);
+  font-size: 13px;
+
+  span { display: inline-flex; align-items: center; gap: 5px; }
+}
 
 /* Per-exercise breakdown */
 .detail {
@@ -1125,6 +1232,21 @@ async function cancel() {
 
 .detail-name { font-size: 15px; font-weight: 700; color: var(--text); }
 .detail-count { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+
+.detail-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detail-time {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .detail-sets {
   display: flex;

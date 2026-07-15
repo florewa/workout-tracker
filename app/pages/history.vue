@@ -4,6 +4,7 @@ interface WorkoutRow {
   date: string
   dayId: number | null
   dayCode: string | null
+  startedAt: string | null
   finishedAt: string | null
   memberCount: number
   setCount: number
@@ -19,6 +20,15 @@ const { data: workouts, refresh } = await useAsyncData(
 
 function dateLabel(iso: string): string {
   return dateWithWeekday(iso, { year: true })
+}
+
+function clockLabel(iso: string): string {
+  return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
+
+function timeRangeLabel(workout: WorkoutRow): string {
+  const start = clockLabel(workout.startedAt ?? workout.date)
+  return workout.finishedAt ? `${start}–${clockLabel(workout.finishedAt)}` : `с ${start}`
 }
 
 function open(id: number) { navigateTo(`/workout/${id}`) }
@@ -52,7 +62,7 @@ async function remove(w: WorkoutRow) {
         <button type="button" class="row-open" @click="open(w.id)">
           <div class="row-main">
             <span class="row-title">{{ w.dayCode ?? 'Тренировка' }}</span>
-            <span class="row-date">{{ dateLabel(w.date) }}</span>
+            <span class="row-date">{{ dateLabel(w.date) }} · {{ timeRangeLabel(w) }}</span>
           </div>
           <span class="row-sets">{{ w.setCount }} подх.</span>
         </button>
