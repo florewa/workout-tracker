@@ -9,9 +9,14 @@ export default defineEventHandler(async (event) => {
   if (!Number.isInteger(id) || id <= 0) throw createError({ statusCode: 400, statusMessage: 'Неверный id' })
   const src = await exerciseSource(db, id)
   if (src === undefined) throw createError({ statusCode: 404, statusMessage: 'Не найдено' })
-  if (src) throw createError({ statusCode: 403, statusMessage: 'Встроенное упражнение нельзя изменять' })
-  const body = await readBody<{ name?: string; categoryId?: number | null; muscleGroup?: string | null }>(event)
+  const body = await readBody<{ name?: string; categoryId?: number | null; muscleGroup?: string | null; weightStep?: number }>(event)
+  if (src && (body?.name !== undefined || body?.categoryId !== undefined || body?.muscleGroup !== undefined)) {
+    throw createError({ statusCode: 403, statusMessage: 'У встроенного упражнения можно изменить только шаг веса' })
+  }
   if (body?.name !== undefined && !body.name.trim()) throw createError({ statusCode: 400, statusMessage: 'Название не может быть пустым' })
+  if (body?.weightStep !== undefined && (!Number.isFinite(body.weightStep) || body.weightStep < 0.01 || body.weightStep > 100)) {
+    throw createError({ statusCode: 400, statusMessage: 'Шаг веса должен быть от 0,01 до 100 кг' })
+  }
   try {
     await updateExercise(db, id, body ?? {})
   } catch (e) {

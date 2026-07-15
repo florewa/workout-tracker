@@ -1,0 +1,1 @@
+ALTER TABLE "exercises" ADD COLUMN "weight_step" real DEFAULT 2.5 NOT NULL;

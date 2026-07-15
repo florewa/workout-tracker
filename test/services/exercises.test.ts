@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { testDb, resetDb } from '../helpers/db'
 import { exercises } from '~~/server/db/schema'
-import { listExercises } from '~~/server/services/exercises'
+import { createExercise, getExercise, listExercises, updateExercise } from '~~/server/services/exercises'
 
 beforeEach(async () => { await resetDb() })
 
@@ -24,5 +24,18 @@ describe('listExercises', () => {
     await testDb.insert(exercises).values({ name: 'Присед' })
     const list = await listExercises(testDb, { search: 'жим' })
     expect(list.map((e) => e.name)).toEqual(['Жим лёжа'])
+  })
+
+  it('сохраняет индивидуальный шаг изменения веса', async () => {
+    const { id } = await createExercise(testDb, { name: 'Подъём на бицепс', weightStep: 0.5 })
+    expect((await getExercise(testDb, id))?.weightStep).toBe(0.5)
+
+    await updateExercise(testDb, id, { weightStep: 1.25 })
+    expect((await getExercise(testDb, id))?.weightStep).toBe(1.25)
+  })
+
+  it('использует шаг 2,5 кг по умолчанию', async () => {
+    const { id } = await createExercise(testDb, { name: 'Тяга' })
+    expect((await getExercise(testDb, id))?.weightStep).toBe(2.5)
   })
 })

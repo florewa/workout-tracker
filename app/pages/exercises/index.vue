@@ -3,7 +3,7 @@ interface Category { id: number; name: string; order: number }
 interface ExerciseRow {
   id: number; name: string; nameEn: string | null; muscleGroup: string | null
   primaryMuscles: string[] | null; categoryId: number | null; categoryName: string | null
-  imageUrl: string | null; isFavorite: boolean
+  imageUrl: string | null; weightStep: number; isFavorite: boolean
 }
 
 const api = useApi()
@@ -45,7 +45,8 @@ interface ExerciseDetail {
   id: number; name: string; nameEn: string | null; muscleGroup: string | null
   primaryMuscles: string[] | null; secondaryMuscles: string[] | null
   equipment: string | null; instructions: string | null; source: string | null
-  categoryId: number | null; categoryName: string | null; imageUrl: string | null; isFavorite: boolean
+  categoryId: number | null; categoryName: string | null; imageUrl: string | null
+  weightStep: number; isFavorite: boolean
 }
 const detail = ref<ExerciseDetail | null>(null)
 interface Variation { id: number; name: string; isDefault: boolean }
@@ -136,25 +137,39 @@ function editFromDetail() {
   const d = detail.value
   if (!d) return
   detail.value = null
-  openEdit({ id: d.id, name: d.name, nameEn: d.nameEn, muscleGroup: d.muscleGroup, primaryMuscles: d.primaryMuscles, categoryId: d.categoryId, categoryName: d.categoryName, imageUrl: d.imageUrl })
+  openEdit({ id: d.id, name: d.name, nameEn: d.nameEn, muscleGroup: d.muscleGroup, primaryMuscles: d.primaryMuscles, categoryId: d.categoryId, categoryName: d.categoryName, imageUrl: d.imageUrl, weightStep: d.weightStep, isFavorite: d.isFavorite }, Boolean(d.source))
 }
 
 function goBack() { navigateTo('/select') }
 
 // ── Создание/правка ──
-const editing = ref<null | { id: number | null; name: string; categoryId: number | null; muscleGroup: string }>(null)
+const editing = ref<null | {
+  id: number | null
+  name: string
+  categoryId: number | null
+  muscleGroup: string
+  weightStep: number
+  builtIn: boolean
+}>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pickedFile = ref<File | null>(null)
 const pickedPreview = ref<string | null>(null)
 const saving = ref(false)
 
 function openCreate() {
-  editing.value = { id: null, name: '', categoryId: activeCategory.value, muscleGroup: '' }
+  editing.value = { id: null, name: '', categoryId: activeCategory.value, muscleGroup: '', weightStep: 2.5, builtIn: false }
   pickedFile.value = null
   pickedPreview.value = null
 }
-function openEdit(e: ExerciseRow) {
-  editing.value = { id: e.id, name: e.name, categoryId: e.categoryId, muscleGroup: e.muscleGroup ?? '' }
+function openEdit(e: ExerciseRow, builtIn = false) {
+  editing.value = {
+    id: e.id,
+    name: e.name,
+    categoryId: e.categoryId,
+    muscleGroup: e.muscleGroup ?? '',
+    weightStep: e.weightStep ?? 2.5,
+    builtIn,
+  }
   pickedFile.value = null
   pickedPreview.value = e.imageUrl
 }
@@ -181,17 +196,34 @@ async function save() {
   const e = editing.value
   if (!e || saving.value) return
   const name = e.name.trim()
-  if (!name) { toast('Введите название', 'error'); return }
+  if (!e.builtIn && !name) { toast('Введите название', 'error'); return }
+  const weightStep = Number(e.weightStep)
+  if (!Number.isFinite(weightStep) || weightStep < 0.01 || weightStep > 100) {
+    toast('Укажите шаг веса от 0,01 до 100 кг', 'error')
+    return
+  }
   saving.value = true
   try {
     let id = e.id
     if (id == null) {
-      const res = await api.post<{ id: number }>('/api/exercises', { name, categoryId: e.categoryId, muscleGroup: e.muscleGroup })
+      const res = await api.post<{ id: number }>('/api/exercises', {
+        name,
+        categoryId: e.categoryId,
+        muscleGroup: e.muscleGroup,
+        weightStep,
+      })
       id = res.id
+    } else if (e.builtIn) {
+      await api.patch(`/api/exercises/${id}`, { weightStep })
     } else {
-      await api.patch(`/api/exercises/${id}`, { name, categoryId: e.categoryId, muscleGroup: e.muscleGroup })
+      await api.patch(`/api/exercises/${id}`, {
+        name,
+        categoryId: e.categoryId,
+        muscleGroup: e.muscleGroup,
+        weightStep,
+      })
     }
-    if (pickedFile.value && id != null) await uploadImage(id, pickedFile.value)
+    if (!e.builtIn && pickedFile.value && id != null) await uploadImage(id, pickedFile.value)
     editing.value = null
     await refreshExercises()
   } catch (err) {
@@ -368,9 +400,10 @@ async function deleteCategory(id: number) {
               :secondary="detail.secondaryMuscles ?? []"
             />
 
-            <div v-if="detail.muscleGroup || detail.equipment" class="detail-meta">
+            <div class="detail-meta">
               <span v-if="detail.muscleGroup" class="meta-pill"><Icon name="lucide:target" /> {{ detail.muscleGroup }}</span>
               <span v-if="detail.equipment" class="meta-pill"><Icon name="lucide:dumbbell" /> {{ detail.equipment }}</span>
+              <span class="meta-pill"><Icon name="lucide:plus-minus" /> Шаг {{ detail.weightStep }} кг</span>
             </div>
 
             <ol v-if="detailSteps.length" class="steps">
@@ -422,8 +455,10 @@ async function deleteCategory(id: number) {
               </div>
             </div>
 
-            <div v-if="!detail.source" class="sheet-actions">
-              <AppButton icon="lucide:pencil" variant="ghost" @click="editFromDetail">Редактировать</AppButton>
+            <div class="sheet-actions">
+              <AppButton icon="lucide:settings-2" variant="ghost" @click="editFromDetail">
+                {{ detail.source ? 'Настроить шаг веса' : 'Редактировать' }}
+              </AppButton>
             </div>
           </div>
         </div>
@@ -436,22 +471,22 @@ async function deleteCategory(id: number) {
         <div v-if="editing" class="sheet-backdrop" @click.self="closeEdit">
           <div class="sheet glass">
             <div class="sheet-head">
-              <h2 class="sheet-title">{{ editing.id ? 'Упражнение' : 'Новое упражнение' }}</h2>
+              <h2 class="sheet-title">{{ editing.builtIn ? 'Шаг веса' : editing.id ? 'Упражнение' : 'Новое упражнение' }}</h2>
               <button type="button" class="sheet-close" @click="closeEdit"><Icon name="lucide:x" /></button>
             </div>
 
-            <button type="button" class="image-pick" @click="fileInput?.click()">
+            <button v-if="!editing.builtIn" type="button" class="image-pick" @click="fileInput?.click()">
               <img v-if="pickedPreview" :src="pickedPreview" alt="" class="image-preview" />
               <template v-else><Icon name="lucide:image-plus" /><span>Добавить фото</span></template>
             </button>
             <input ref="fileInput" type="file" accept="image/*" class="hidden-file" @change="onPickFile" />
 
-            <label class="field">
+            <label v-if="!editing.builtIn" class="field">
               <span class="field-label">Название</span>
               <input v-model="editing.name" type="text" class="field-input" placeholder="Жим штанги лёжа" />
             </label>
 
-            <label class="field">
+            <label v-if="!editing.builtIn" class="field">
               <span class="field-label">Категория</span>
               <select v-model="editing.categoryId" class="field-input">
                 <option :value="null">— без категории —</option>
@@ -459,14 +494,29 @@ async function deleteCategory(id: number) {
               </select>
             </label>
 
-            <label class="field">
+            <label v-if="!editing.builtIn" class="field">
               <span class="field-label">Что качает (текст)</span>
               <input v-model="editing.muscleGroup" type="text" class="field-input" placeholder="Грудь, трицепс" />
             </label>
 
+            <label class="field">
+              <span class="field-label">Шаг изменения веса, кг</span>
+              <input
+                v-model.number="editing.weightStep"
+                type="number"
+                inputmode="decimal"
+                min="0.01"
+                max="100"
+                step="0.25"
+                class="field-input"
+                placeholder="2,5"
+              />
+              <span class="field-hint">На столько килограммов меняется вес кнопками − и + во время тренировки.</span>
+            </label>
+
             <div class="sheet-actions">
               <AppButton icon="lucide:check" :disabled="saving" @click="save">Сохранить</AppButton>
-              <button v-if="editing.id" type="button" class="del-btn" @click="removeExercise">Удалить упражнение</button>
+              <button v-if="editing.id && !editing.builtIn" type="button" class="del-btn" @click="removeExercise">Удалить упражнение</button>
             </div>
           </div>
         </div>
@@ -726,6 +776,7 @@ async function deleteCategory(id: number) {
 
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.field-hint { font-size: 12px; line-height: 1.35; color: var(--muted); }
 .field-input {
   height: 44px;
   padding: 0 var(--space-3);

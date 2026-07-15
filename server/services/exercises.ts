@@ -28,6 +28,7 @@ export interface ExerciseFull {
   categoryId: number | null
   categoryName: string | null
   imageUrl: string | null
+  weightStep: number
 }
 
 // Банк: упражнения с категорией и картинкой, с поиском и фильтром по категории
@@ -48,6 +49,7 @@ export async function listExercisesFull(
       categoryId: exercises.categoryId,
       categoryName: categories.name,
       imageUrl: exercises.imageUrl,
+      weightStep: exercises.weightStep,
     })
     .from(exercises)
     .leftJoin(categories, eq(categories.id, exercises.categoryId))
@@ -70,6 +72,7 @@ export async function getExercise(executor: Executor, id: number) {
       categoryId: exercises.categoryId,
       categoryName: categories.name,
       imageUrl: exercises.imageUrl,
+      weightStep: exercises.weightStep,
     })
     .from(exercises)
     .leftJoin(categories, eq(categories.id, exercises.categoryId))
@@ -86,12 +89,13 @@ export async function exerciseSource(executor: Executor, id: number): Promise<st
 
 export async function createExercise(
   executor: Executor,
-  input: { name: string; categoryId?: number | null; muscleGroup?: string | null },
+  input: { name: string; categoryId?: number | null; muscleGroup?: string | null; weightStep?: number },
 ): Promise<{ id: number }> {
   const [row] = await executor.insert(exercises).values({
     name: input.name.trim(),
     categoryId: input.categoryId ?? null,
     muscleGroup: input.muscleGroup?.trim() || null,
+    weightStep: input.weightStep ?? 2.5,
   }).returning({ id: exercises.id })
   return row
 }
@@ -99,12 +103,13 @@ export async function createExercise(
 export async function updateExercise(
   executor: Executor,
   id: number,
-  input: { name?: string; categoryId?: number | null; muscleGroup?: string | null; imageUrl?: string | null },
+  input: { name?: string; categoryId?: number | null; muscleGroup?: string | null; weightStep?: number; imageUrl?: string | null },
 ): Promise<void> {
   const patch: Record<string, unknown> = {}
   if (input.name !== undefined) patch.name = input.name.trim()
   if (input.categoryId !== undefined) patch.categoryId = input.categoryId
   if (input.muscleGroup !== undefined) patch.muscleGroup = input.muscleGroup?.trim() || null
+  if (input.weightStep !== undefined) patch.weightStep = input.weightStep
   if (input.imageUrl !== undefined) patch.imageUrl = input.imageUrl
   if (Object.keys(patch).length) await executor.update(exercises).set(patch).where(eq(exercises.id, id))
 }

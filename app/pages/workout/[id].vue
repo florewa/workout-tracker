@@ -1,6 +1,13 @@
 <script setup lang="ts">
 interface MemberLite { id: number; name: string; avatarUrl: string | null }
-interface DayExercise { id: number; name: string; order: number; targetSets: number | null; targetReps: string | null }
+interface DayExercise {
+  id: number
+  name: string
+  order: number
+  targetSets: number | null
+  targetReps: string | null
+  weightStep: number
+}
 interface SetRow {
   id: number; userId: number; exerciseId: number; exerciseName: string
   setOrder: number; weight: number; reps: number; skipped: boolean
@@ -300,7 +307,10 @@ watch([variations, prefill], () => {
   selectedVariationId.value = (variations.value.find(v => v.isDefault) ?? variations.value[0]).id
 }, { immediate: true })
 
-function stepWeight(delta: number) { weight.value = Math.max(0, Math.round((weight.value + delta) * 4) / 4) }
+const activeWeightStep = computed(() => activeExercise.value?.weightStep ?? 2.5)
+function stepWeight(direction: -1 | 1) {
+  weight.value = Math.max(0, Math.round((weight.value + direction * activeWeightStep.value) * 100) / 100)
+}
 function stepReps(delta: number) { reps.value = Math.max(0, reps.value + delta) }
 
 // Числовая клавиатура в Telegram не имеет кнопки «Готово» — закрываем её сами:
@@ -612,18 +622,18 @@ async function cancel() {
           <div class="stepper">
             <span class="stepper-label">Вес, кг</span>
             <div class="stepper-row">
-              <button type="button" class="step-btn" @click="stepWeight(-2.5)"><Icon name="lucide:minus" /></button>
+              <button type="button" class="step-btn" @click="stepWeight(-1)"><Icon name="lucide:minus" /></button>
               <input
                 v-model.number="weight"
                 type="number"
                 inputmode="decimal"
                 enterkeyhint="done"
-                step="2.5"
+                :step="activeWeightStep"
                 min="0"
                 class="step-input"
                 @keydown.enter.prevent="blurActive"
               />
-              <button type="button" class="step-btn" @click="stepWeight(2.5)"><Icon name="lucide:plus" /></button>
+              <button type="button" class="step-btn" @click="stepWeight(1)"><Icon name="lucide:plus" /></button>
             </div>
           </div>
           <div class="stepper">

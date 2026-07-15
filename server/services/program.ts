@@ -18,6 +18,7 @@ async function dayExercises(executor: Executor, dayId: number) {
       id: exercises.id,
       name: exercises.name,
       imageUrl: exercises.imageUrl,
+      weightStep: exercises.weightStep,
       order: programExercises.order,
       targetSets: programExercises.targetSets,
       targetReps: programExercises.targetReps,

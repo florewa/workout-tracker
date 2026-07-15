@@ -42,6 +42,7 @@ export const exercises = pgTable('exercises', {
   equipment: varchar('equipment', { length: 60 }),
   instructions: text('instructions'),
   source: varchar('source', { length: 40 }), // 'custom' | 'free-exercise-db'
+  weightStep: real('weight_step').notNull().default(2.5),
   defaultReps: varchar('default_reps', { length: 40 }),
   defaultTempo: varchar('default_tempo', { length: 20 }),
   isArchived: boolean('is_archived').notNull().default(false),

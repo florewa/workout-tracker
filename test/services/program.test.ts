@@ -19,6 +19,7 @@ describe('program', () => {
     expect(res!.day.code).toBe('Верх A')
     expect(res!.exercises[0].id).toBe(benchId)
     expect(res!.exercises[0].targetSets).toBe(5)
+    expect(res!.exercises[0].weightStep).toBe(2.5)
   })
 
   it('getProgramDay возвращает null для неизвестного кода', async () => {
