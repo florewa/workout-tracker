@@ -243,6 +243,19 @@ export async function finishWorkout(executor: Executor, id: number): Promise<voi
   await executor.update(workouts).set({ finishedAt: new Date() }).where(and(eq(workouts.id, id), isNull(workouts.deletedAt)))
 }
 
+export async function changeWorkoutDay(executor: Executor, id: number, dayId: number): Promise<boolean> {
+  const rows = await executor
+    .update(workouts)
+    .set({ dayId })
+    .where(and(
+      eq(workouts.id, id),
+      isNull(workouts.finishedAt),
+      isNull(workouts.deletedAt),
+    ))
+    .returning({ id: workouts.id })
+  return rows.length > 0
+}
+
 export async function trashWorkout(executor: Executor, id: number): Promise<boolean> {
   const rows = await executor
     .update(workouts)

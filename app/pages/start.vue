@@ -4,6 +4,7 @@ const api = useApi()
 const session = useSessionStore()
 const route = useRoute()
 const { toast } = useDialog()
+const starting = ref(false)
 
 const { data: friends } = await useAsyncData('friends', () => api.get<UserLite[]>('/api/friends'), { server: false })
 const dayId = computed(() => (route.query.dayId ? Number(route.query.dayId) : null))
@@ -27,6 +28,8 @@ function goBack() { navigateTo('/select') }
 const recordMode = ref<'single' | 'each'>('single')
 
 async function go() {
+  if (starting.value) return
+  starting.value = true
   try {
     const multi = session.selectedMemberIds.length >= 2
     const body: { dayId: number | null; memberIds: number[]; date?: string; recordMode?: string } = {
@@ -36,9 +39,17 @@ async function go() {
     }
     if (dateParam.value) body.date = dateParam.value
     const { id } = await api.post<{ id: number }>('/api/workouts', body)
-    navigateTo(`/workout/${id}`)
-  } catch {
-    toast('Не удалось создать тренировку. Попробуй ещё раз.', 'error')
+    await navigateTo(`/workout/${id}`)
+  } catch (error) {
+    const apiError = error as { statusCode?: number; statusMessage?: string; data?: { workoutId?: number } }
+    if (apiError.statusCode === 409 && apiError.data?.workoutId) {
+      toast('У тебя уже есть активная тренировка', 'info')
+      await navigateTo(`/workout/${apiError.data.workoutId}`)
+      return
+    }
+    toast(apiError.statusMessage ?? 'Не удалось создать тренировку. Попробуй ещё раз.', 'error')
+  } finally {
+    starting.value = false
   }
 }
 </script>
@@ -95,7 +106,7 @@ async function go() {
     </div>
 
     <div class="cta">
-      <AppButton icon-end="lucide:move-right" :disabled="!selectedCount" @click="go">
+      <AppButton icon-end="lucide:move-right" :disabled="!selectedCount || starting" @click="go">
         Поехали
       </AppButton>
     </div>

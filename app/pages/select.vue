@@ -22,6 +22,13 @@ interface ScheduleSlot {
 
 const api = useApi()
 const session = useSessionStore()
+const route = useRoute()
+const { toast } = useDialog()
+const replaceWorkoutId = computed(() => {
+  const value = Number(route.query.replaceWorkoutId)
+  return Number.isInteger(value) && value > 0 ? value : null
+})
+const switchingWorkout = ref(false)
 
 
 const todayIso = localIso(new Date())
@@ -96,9 +103,24 @@ function formatDateLabel(isoDate: string): string {
   return dateWithWeekday(new Date(isoDate + 'T12:00:00'))
 }
 
-function selectDay(day: ProgramDay) {
+async function selectDay(day: ProgramDay) {
+  if (replaceWorkoutId.value != null) {
+    if (switchingWorkout.value) return
+    switchingWorkout.value = true
+    try {
+      await api.patch(`/api/workouts/${replaceWorkoutId.value}/day`, { dayId: day.id })
+      clearNuxtData(`workout-${replaceWorkoutId.value}`)
+      clearNuxtData('workout-day')
+      clearNuxtData('active-workout')
+      await navigateTo(`/workout/${replaceWorkoutId.value}`)
+    } catch (error) {
+      toast((error as { statusMessage?: string }).statusMessage ?? 'Не удалось переключить тренировку', 'error')
+      switchingWorkout.value = false
+    }
+    return
+  }
   session.setMembers(session.currentUser ? [session.currentUser.id] : [])
-  navigateTo(`/start?dayId=${day.id}&date=${selectedDate.value}`)
+  await navigateTo(`/start?dayId=${day.id}&date=${selectedDate.value}`)
 }
 
 function openWorkout(id: number) {
@@ -118,7 +140,7 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
     <div class="header">
       <div class="header-text">
         <h1 class="h1 page-title">Выбор тренировки</h1>
-        <p class="subtitle">{{ selectedDate === todayIso ? 'Выбери программу на сегодня' : headerDate }}</p>
+        <p class="subtitle">{{ replaceWorkoutId ? 'Выбери программу вместо текущей' : selectedDate === todayIso ? 'Выбери программу на сегодня' : headerDate }}</p>
       </div>
       <div class="header-date" aria-label="Текущая дата">
         <Icon name="lucide:calendar" class="calendar-icon" />

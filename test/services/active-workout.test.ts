@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { workouts } from '~~/server/db/schema'
+import { programDays, sets, workouts } from '~~/server/db/schema'
 import {
-  createWorkout, getActiveWorkout, isWorkoutMember, listPendingWorkoutInvites, respondToWorkoutInvite,
+  changeWorkoutDay, createWorkout, getActiveWorkout, isWorkoutMember, listPendingWorkoutInvites, respondToWorkoutInvite,
 } from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
@@ -90,5 +90,21 @@ describe('getActiveWorkout', () => {
 
     expect((await getActiveWorkout(testDb, egor))?.id).toBe(id)
     expect(await listPendingWorkoutInvites(testDb, egor)).toHaveLength(0)
+  })
+
+  it('переключает программу внутри той же активной тренировки', async () => {
+    const { danil, dayId, benchId } = await seedBaseline()
+    const [otherDay] = await testDb.insert(programDays)
+      .values({ code: 'Низ B', title: 'ДЕНЬ 2 · НИЗ B', order: 2 })
+      .returning({ id: programDays.id })
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+    await testDb.insert(sets).values({
+      workoutId: id, userId: danil, exerciseId: benchId, setOrder: 1, weight: 60, reps: 8,
+    })
+
+    expect(await changeWorkoutDay(testDb, id, otherDay.id)).toBe(true)
+    expect(await getActiveWorkout(testDb, danil)).toMatchObject({ id, dayId: otherDay.id })
+    expect(await testDb.select().from(workouts)).toHaveLength(1)
+    expect(await testDb.select().from(sets).where(eq(sets.workoutId, id))).toHaveLength(1)
   })
 })

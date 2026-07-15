@@ -1,12 +1,21 @@
-import { readBody } from 'h3'
+import { createError, readBody } from 'h3'
 import { db } from '~~/server/db/client'
 import { requireUser } from '~~/server/utils/auth'
-import { createWorkout, getWorkoutInviteRecipients } from '~~/server/services/workouts'
+import { createWorkout, getActiveWorkout, getWorkoutInviteRecipients } from '~~/server/services/workouts'
 import { sendWorkoutInvitation } from '~~/server/utils/telegram-send'
 
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
   const body = await readBody<{ dayId?: number | null; memberIds?: number[]; date?: string; recordMode?: string }>(event)
+
+  const active = await getActiveWorkout(db, user.id)
+  if (active) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Сначала заверши или переключи текущую тренировку',
+      data: { workoutId: active.id },
+    })
+  }
 
   let workoutDate: Date | undefined
   if (body?.date) {

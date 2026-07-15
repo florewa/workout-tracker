@@ -233,7 +233,9 @@ watch(
       Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id,
     )[0]
 
-    let restoredId = latest?.slotExerciseId ?? list[0].id
+    let restoredId = latest && list.some(exercise => exercise.id === latest.slotExerciseId)
+      ? latest.slotExerciseId
+      : list[0].id
     if (latest && isComplete(restoredId)) {
       const index = list.findIndex(ex => ex.id === restoredId)
       restoredId = list.slice(index + 1).find(ex => !isComplete(ex.id))?.id
@@ -555,7 +557,7 @@ async function finish() {
   }
 }
 
-function chooseAnother() { navigateTo('/select') }
+function chooseAnother() { navigateTo({ path: '/select', query: { replaceWorkoutId: id } }) }
 
 // Редактирование завершённой тренировки: временно возвращаем её в режим записи
 // (эндпоинты подходов проверяют только членство, не статус), правим, возвращаемся.
