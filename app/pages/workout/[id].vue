@@ -519,6 +519,51 @@ async function doneEditing() {
   finished.value = true
 }
 
+// Когда все участники закрыли все упражнения с заданным числом подходов,
+// один раз предлагаем закончить тренировку. Отказ сохраняем на этом устройстве,
+// чтобы окно не появлялось снова после каждого дополнительного подхода или перезагрузки.
+const completionPromptStorageKey = `workout:${id}:completion-prompt-dismissed`
+const completionPromptDismissed = ref(
+  import.meta.client && localStorage.getItem(completionPromptStorageKey) === '1',
+)
+const completionPromptOpen = ref(false)
+const allPlannedWorkComplete = computed(() => {
+  if (!exercises.value.length || !members.value.length) return false
+  return exercises.value.every((exercise) => {
+    if (targetCount(exercise) == null) return false
+    return members.value.every(member => isMemberComplete(exercise.id, member.id))
+  })
+})
+
+async function offerToFinishCompletedWorkout() {
+  if (
+    !allPlannedWorkComplete.value
+    || completionPromptDismissed.value
+    || completionPromptOpen.value
+    || finished.value
+    || editing.value
+    || busy.value
+  ) return
+
+  completionPromptOpen.value = true
+  const shouldFinish = await confirm({
+    title: 'Всё выполнено!',
+    message: 'Все участники завершили запланированные подходы и упражнения. Завершить тренировку или продолжить и добавить что-нибудь ещё?',
+    confirmText: 'Завершить',
+    cancelText: 'Продолжить',
+  })
+  completionPromptOpen.value = false
+  completionPromptDismissed.value = true
+  if (import.meta.client) localStorage.setItem(completionPromptStorageKey, '1')
+  if (shouldFinish) await finish()
+}
+
+watch(
+  [allPlannedWorkComplete, busy],
+  ([complete, isBusy]) => { if (complete && !isBusy) void offerToFinishCompletedWorkout() },
+  { immediate: true, flush: 'post' },
+)
+
 const hasSets = computed(() => totalSets.value > 0)
 
 async function cancel() {
