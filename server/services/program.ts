@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
-import { programDays, programExercises, exercises, workouts } from '~~/server/db/schema'
+import { programDays, programExercises, programSchedules, exercises, workouts } from '~~/server/db/schema'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
 
@@ -62,6 +62,7 @@ export async function updateDay(executor: Executor, id: number, input: { code?: 
 export async function deleteDay(executor: Executor, id: number): Promise<void> {
   await executor.transaction(async (tx) => {
     await tx.update(workouts).set({ dayId: null }).where(eq(workouts.dayId, id)) // история тренировок остаётся
+    await tx.delete(programSchedules).where(eq(programSchedules.dayId, id))
     await tx.delete(programExercises).where(eq(programExercises.dayId, id))
     await tx.delete(programDays).where(eq(programDays.id, id))
   })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 interface PE { peId: number; id: number; name: string; imageUrl: string | null; targetSets: number | null; targetReps: string | null }
 interface BankItem { id: number; name: string; nameEn: string | null; muscleGroup: string | null; primaryMuscles: string[] | null; categoryName: string | null; imageUrl: string | null }
+interface WeeklySlot { weekday: number; day: { id: number } }
 
 const route = useRoute()
 const api = useApi()
@@ -20,16 +21,21 @@ const WEEKDAYS: [string, number][] = [['Пн', 1], ['Вт', 2], ['Ср', 3], ['�
 
 const dayId = ref<number | null>(route.params.id === 'new' ? null : Number(route.params.id))
 const code = ref('')
-const weekday = ref<number | null>(null)
+const weekdays = ref<number[]>([])
+const originalWeekdays = ref<number[]>([])
 const items = ref<PE[]>([])
 const busy = ref(false)
 
 async function load() {
   if (dayId.value == null) return
   try {
-    const res = await api.get<{ day: { code: string; weekday: number | null }; exercises: PE[] }>(`/api/program/days/${dayId.value}`)
+    const [res, schedule] = await Promise.all([
+      api.get<{ day: { code: string }; exercises: PE[] }>(`/api/program/days/${dayId.value}`),
+      api.get<WeeklySlot[]>('/api/program/schedule/weekly'),
+    ])
     code.value = res.day.code
-    weekday.value = res.day.weekday
+    weekdays.value = schedule.filter(slot => slot.day.id === dayId.value).map(slot => slot.weekday)
+    originalWeekdays.value = [...weekdays.value]
     items.value = res.exercises
   } catch {
     toast('Не удалось загрузить программу', 'error')
@@ -44,7 +50,7 @@ async function ensureDay(): Promise<number | null> {
   const c = code.value.trim()
   if (!c) { toast('Введите название программы', 'error'); return null }
   try {
-    const { id } = await api.post<{ id: number }>('/api/program/days', { code: c, weekday: weekday.value })
+    const { id } = await api.post<{ id: number }>('/api/program/days', { code: c })
     dayId.value = id
     window.history.replaceState({}, '', `/program/${id}`)
     return id
@@ -60,7 +66,8 @@ async function saveDay() {
   try {
     const id = await ensureDay()
     if (id == null) return
-    await api.patch(`/api/program/days/${id}`, { code: code.value.trim(), weekday: weekday.value })
+    await api.patch(`/api/program/days/${id}`, { code: code.value.trim() })
+    await saveWeekdays(id)
     toast('Сохранено', 'success')
   } catch (e) {
     toast((e as { statusMessage?: string })?.statusMessage ?? 'Не удалось сохранить', 'error')
@@ -69,7 +76,22 @@ async function saveDay() {
   }
 }
 
-function setWeekday(d: number) { weekday.value = weekday.value === d ? null : d }
+function setWeekday(d: number) {
+  weekdays.value = weekdays.value.includes(d)
+    ? weekdays.value.filter(value => value !== d)
+    : [...weekdays.value, d].sort((a, b) => a - b)
+}
+
+async function saveWeekdays(id: number) {
+  for (const [, day] of WEEKDAYS) {
+    const selected = weekdays.value.includes(day)
+    const wasSelected = originalWeekdays.value.includes(day)
+    if (selected === wasSelected) continue
+    if (selected) await api.put(`/api/program/schedule/weekly/${day}`, { dayId: id })
+    else await api.del(`/api/program/schedule/weekly/${day}`)
+  }
+  originalWeekdays.value = [...weekdays.value]
+}
 
 async function saveTarget(it: PE) {
   try {
@@ -185,11 +207,11 @@ async function addExercise(ex: BankItem) {
             :key="d"
             type="button"
             class="wd-btn"
-            :class="{ active: weekday === d }"
+            :class="{ active: weekdays.includes(d) }"
             @click="setWeekday(d)"
           >{{ lbl }}</button>
         </div>
-        <span class="hint">Можно не привязывать — тогда программа доступна вручную.</span>
+        <span class="hint">Можно выбрать несколько дней или настроить переносы в расписании.</span>
       </div>
 
       <div class="ex-head">

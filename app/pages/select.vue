@@ -14,6 +14,12 @@ interface Workout {
   memberCount: number
 }
 
+interface ScheduleSlot {
+  date: string
+  day: { id: number } | null
+  source: 'weekly' | 'override' | null
+}
+
 const api = useApi()
 const session = useSessionStore()
 
@@ -30,9 +36,10 @@ const headerDate = computed(() =>
 const { data, status } = await useAsyncData(
   'select-screen',
   async () => {
-    const [days, workouts] = await Promise.all([
+    const [days, workouts, todaySchedule] = await Promise.all([
       api.get<ProgramDay[]>('/api/program/days'),
       api.get<Workout[]>('/api/workouts'),
+      api.get<ScheduleSlot[]>('/api/program/schedule', { from: todayIso, to: todayIso }),
     ])
 
     const exerciseCounts = await Promise.all(
@@ -44,7 +51,7 @@ const { data, status } = await useAsyncData(
       ),
     )
 
-    return { days, workouts, exerciseCounts }
+    return { days, workouts, todaySchedule, exerciseCounts }
   },
   { server: false },
 )
@@ -80,14 +87,8 @@ const selectedDayWorkouts = computed<Workout[]>(() => {
   return allWorkouts.value.filter(w => localIso(new Date(w.date)) === selectedDate.value)
 })
 
-// ISO weekday of today: Mon=1 … Sun=7
-const todayIsoWeekday = (() => {
-  const js = new Date().getDay()
-  return js === 0 ? 7 : js
-})()
-
 function isFeatured(day: ProgramDay): boolean {
-  return day.weekday === todayIsoWeekday
+  return data.value?.todaySchedule?.[0]?.day?.id === day.id
 }
 
 // Format a date string for display
@@ -105,6 +106,7 @@ function openWorkout(id: number) {
 }
 
 function openBank() { navigateTo('/exercises') }
+function openSchedule() { navigateTo('/schedule') }
 function openNewProgram() { navigateTo('/program/new') }
 function editProgram(id: number) { navigateTo('/program/' + id) }
 </script>
@@ -141,6 +143,15 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
         <span class="bank-sub">900+ упражнений с фото и мышцами · создавай свои</span>
       </span>
       <Icon name="lucide:arrow-right" class="bank-chevron" aria-hidden="true" />
+    </button>
+
+    <button type="button" class="schedule-entry glass" @click="openSchedule">
+      <span class="schedule-icon" aria-hidden="true"><Icon name="lucide:calendar-range" /></span>
+      <span class="schedule-text">
+        <span class="schedule-title">Расписание</span>
+        <span class="schedule-sub">План на неделю, переносы и дни отдыха</span>
+      </span>
+      <Icon name="lucide:chevron-right" class="schedule-chevron" aria-hidden="true" />
     </button>
 
     <!-- TODAY → program chooser -->
@@ -450,4 +461,35 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
 .bank-title { font-family: var(--font-display); font-size: 17px; font-weight: 800; }
 .bank-sub { font-size: 12px; opacity: 0.85; line-height: 1.3; }
 .bank-chevron { font-size: 22px; flex-shrink: 0; }
+
+/* ── Schedule entry ── */
+.schedule-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 68px;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+
+  &:active { transform: scale(0.99); }
+}
+.schedule-icon {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+  color: var(--accent);
+  font-size: 21px;
+}
+.schedule-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.schedule-title { font-size: 15px; font-weight: 700; }
+.schedule-sub { font-size: 12px; line-height: 1.35; color: var(--muted); }
+.schedule-chevron { flex-shrink: 0; color: var(--muted); font-size: 18px; }
 </style>

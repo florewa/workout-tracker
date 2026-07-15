@@ -1,6 +1,6 @@
 import {
   pgTable, serial, integer, bigint, varchar, text, real,
-  timestamp, boolean, primaryKey, index, uniqueIndex, type AnyPgColumn,
+  timestamp, date, boolean, primaryKey, index, uniqueIndex, type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
@@ -65,6 +65,19 @@ export const programExercises = pgTable('program_exercises', {
   tempo: varchar('tempo', { length: 20 }),
   restSec: integer('rest_sec'),
 })
+
+// Расписание программ: повторяющиеся дни недели и переопределения на дату.
+// Для недельной строки заполнен weekday и dayId, для даты — date, а dayId=null
+// означает явно назначенный день отдыха.
+export const programSchedules = pgTable('program_schedules', {
+  id: serial('id').primaryKey(),
+  dayId: integer('day_id').references(() => programDays.id),
+  weekday: integer('weekday'),
+  date: date('date', { mode: 'string' }),
+}, (t) => ({
+  weekdayUnique: uniqueIndex('program_schedules_weekday_unique').on(t.weekday),
+  dateUnique: uniqueIndex('program_schedules_date_unique').on(t.date),
+}))
 
 export const workouts = pgTable('workouts', {
   id: serial('id').primaryKey(),

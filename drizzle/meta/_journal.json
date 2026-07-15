@@ -99,6 +99,13 @@
       "when": 1782769282405,
       "tag": "0013_short_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784139405978,
+      "tag": "0014_zippy_mister_sinister",
+      "breakpoints": true
     }
   ]
 }

@@ -1,26 +1,26 @@
 import { and, eq, isNotNull } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
-import { programDays, programExercises, exercises, users } from '~~/server/db/schema'
+import { programExercises, exercises, users } from '~~/server/db/schema'
+import { getScheduledProgram, listWeeklySchedule, type ScheduledProgram } from '~~/server/services/schedule'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
 
-// ── Время по Москве (часовой пояс сервера — UTC, считаем день недели явно) ──
-function mskWeekday(now = new Date()): number {
-  const wd = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Moscow', weekday: 'short' }).format(now)
-  const map: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }
-  return map[wd] ?? 1
+function mskDaySeed(now = new Date()): number {
+  const ymd = mskIsoDate(now)
+  return Math.floor(Date.parse(`${ymd}T00:00:00Z`) / 86_400_000)
 }
 
-function mskDaySeed(now = new Date()): number {
-  const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
-  return Math.floor(Date.parse(`${ymd}T00:00:00Z`) / 86_400_000)
+function mskIsoDate(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now)
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${value.year}-${value.month}-${value.day}`
 }
 
 export interface DayPlan { code: string; title: string; exercises: string[] }
 
-export async function getDayPlan(executor: Executor, weekday: number): Promise<DayPlan | null> {
-  const [day] = await executor.select().from(programDays).where(eq(programDays.weekday, weekday)).limit(1)
-  if (!day) return null
+async function loadDayPlan(executor: Executor, day: ScheduledProgram): Promise<DayPlan> {
   const exs = await executor
     .select({ name: exercises.name })
     .from(programExercises)
@@ -28,6 +28,16 @@ export async function getDayPlan(executor: Executor, weekday: number): Promise<D
     .where(eq(programExercises.dayId, day.id))
     .orderBy(programExercises.order)
   return { code: day.code, title: day.title, exercises: exs.map(e => e.name) }
+}
+
+export async function getDayPlan(executor: Executor, weekday: number): Promise<DayPlan | null> {
+  const day = (await listWeeklySchedule(executor)).find(slot => slot.weekday === weekday)?.day
+  return day ? loadDayPlan(executor, day) : null
+}
+
+export async function getDayPlanForDate(executor: Executor, date: string): Promise<DayPlan | null> {
+  const day = (await getScheduledProgram(executor, date)).day
+  return day ? loadDayPlan(executor, day) : null
 }
 
 export async function getReminderRecipients(executor: Executor): Promise<{ telegramId: number; name: string }[]> {
@@ -64,7 +74,7 @@ export async function buildTrainingReminder(
   executor: Executor,
   now = new Date(),
 ): Promise<{ text: string; recipients: { telegramId: number; name: string }[]; plan: DayPlan } | null> {
-  const plan = await getDayPlan(executor, mskWeekday(now))
+  const plan = await getDayPlanForDate(executor, mskIsoDate(now))
   if (!plan) return null
   const recipients = await getReminderRecipients(executor)
   return { text: buildReminderText(plan, mskDaySeed(now)), recipients, plan }

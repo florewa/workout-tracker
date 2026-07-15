@@ -3,8 +3,13 @@ interface ProgramDay {
   id: number
   code: string
   title: string
-  weekday: number | null
   order: number
+}
+
+interface ScheduleSlot {
+  date: string
+  day: ProgramDay | null
+  source: 'weekly' | 'override' | null
 }
 
 interface ActiveWorkout {
@@ -16,8 +21,7 @@ interface ActiveWorkout {
 const api = useApi()
 const session = useSessionStore()
 
-// Today's ISO weekday: Mon=1 … Sun=7
-const isoToday = ((new Date().getDay() + 6) % 7) + 1
+const todayIso = localIso(new Date())
 
 // Check for an active workout first — redirect immediately if one exists
 const { data: active } = await useAsyncData(
@@ -37,15 +41,15 @@ if (active.value?.id) {
   await navigateTo('/workout/' + active.value.id, { replace: true })
 }
 
-// Only fetch program days when no redirect happened
-const { data: days } = await useAsyncData(
-  'program-days',
-  () => api.get<ProgramDay[]>('/api/program/days'),
+// Resolve today's plan only when no active workout redirected us away.
+const { data: schedule } = await useAsyncData(
+  'today-schedule',
+  () => api.get<ScheduleSlot[]>('/api/program/schedule', { from: todayIso, to: todayIso }),
   { server: false },
 )
 
 const planned = computed<ProgramDay | null>(() =>
-  days.value?.find(d => d.weekday === isoToday) ?? null,
+  schedule.value?.[0]?.day ?? null,
 )
 
 const heroPhoto = computed<string | null>(() =>
