@@ -5,7 +5,7 @@ interface Series { userId: number; baseline: number; points: { date: string; e1r
 interface BoardRow { userId: number; startE1rm: number; currentE1rm: number; deltaKg: number; deltaPct: number }
 interface CompetitionPayload {
   period: { key: PeriodKey; label: string; start: string }
-  participants: { id: number; name: string }[]
+  participants: { id: number; name: string; avatarUrl: string | null }[]
   exercises: { exerciseId: number; name: string }[]
   byExercise: Record<number, { series: Series[]; leaderboard: BoardRow[] }>
   rankings: {

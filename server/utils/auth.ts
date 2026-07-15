@@ -7,13 +7,13 @@ import { resolveUser, isAllowed, parseAllowlist } from '~~/server/services/users
 
 // Авторизация по сырому initData. Используется и в HTTP (requireUser),
 // и в WebSocket-хендлере, где нет H3Event с заголовками.
-export async function authenticateInitData(initData: string): Promise<{ id: number; name: string }> {
+export async function authenticateInitData(initData: string): Promise<{ id: number; name: string; avatarUrl: string | null }> {
   // Dev-обход (только не в production)
   const devId = process.env.AUTH_DEV_USER_ID
   if (devId && process.env.NODE_ENV !== 'production') {
     const [u] = await db.select().from(users).where(eq(users.id, Number(devId))).limit(1)
     if (!u) throw createError({ statusCode: 500, statusMessage: `AUTH_DEV_USER_ID=${devId}: пользователь не найден` })
-    return { id: u.id, name: u.name }
+    return { id: u.id, name: u.name, avatarUrl: u.avatarUrl }
   }
 
   if (!initData) throw createError({ statusCode: 401, statusMessage: 'Нет авторизации' })
@@ -35,7 +35,7 @@ export async function authenticateInitData(initData: string): Promise<{ id: numb
   return resolveUser(db, tg)
 }
 
-export async function requireUser(event: H3Event): Promise<{ id: number; name: string }> {
+export async function requireUser(event: H3Event): Promise<{ id: number; name: string; avatarUrl: string | null }> {
   const header = getHeader(event, 'authorization') ?? ''
   const initData = header.startsWith('tma ') ? header.slice(4) : ''
   return authenticateInitData(initData)

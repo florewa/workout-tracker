@@ -1,10 +1,11 @@
 <script setup lang="ts">
-interface UserLite { id: number; name: string }
+interface UserLite { id: number; name: string; avatarUrl: string | null }
 
 const theme = useThemeStore()
 const session = useSessionStore()
 const api = useApi()
 const { toast, confirm } = useDialog()
+const initData = useState<string>('tgInitData', () => '')
 
 const themeOptions = [
   { value: 'system', label: 'Система', icon: 'lucide:monitor' },
@@ -19,6 +20,63 @@ const { data: friends, refresh: refreshFriends } = await useAsyncData(
 )
 
 const inviting = ref(false)
+const avatarInput = ref<HTMLInputElement | null>(null)
+const avatarSaving = ref(false)
+
+async function pickAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || avatarSaving.value) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    toast('Выбери JPG, PNG или WebP', 'error')
+    input.value = ''
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Файл должен быть меньше 5 МБ', 'error')
+    input.value = ''
+    return
+  }
+
+  avatarSaving.value = true
+  try {
+    const form = new FormData()
+    form.append('avatar', file)
+    const { avatarUrl } = await $fetch<{ avatarUrl: string }>('/api/me/avatar', {
+      method: 'POST',
+      headers: initData.value ? { Authorization: `tma ${initData.value}` } : {},
+      body: form,
+    })
+    if (session.currentUser) session.currentUser = { ...session.currentUser, avatarUrl }
+    toast('Аватар обновлён', 'success')
+  } catch (error) {
+    toast((error as { statusMessage?: string }).statusMessage ?? 'Не удалось загрузить аватар', 'error')
+  } finally {
+    avatarSaving.value = false
+    input.value = ''
+  }
+}
+
+async function removeAvatar() {
+  if (!session.currentUser?.avatarUrl || avatarSaving.value) return
+  const ok = await confirm({
+    title: 'Удалить аватар?',
+    message: 'Вместо фотографии снова будут показаны инициалы.',
+    confirmText: 'Удалить',
+    danger: true,
+  })
+  if (!ok) return
+  avatarSaving.value = true
+  try {
+    await api.del('/api/me/avatar')
+    session.currentUser = { ...session.currentUser, avatarUrl: null }
+    toast('Аватар удалён', 'success')
+  } catch {
+    toast('Не удалось удалить аватар', 'error')
+  } finally {
+    avatarSaving.value = false
+  }
+}
 
 async function invite() {
   if (inviting.value) return
@@ -84,12 +142,21 @@ async function removeFriend(id: number) {
     </header>
 
     <div v-if="session.currentUser" class="profile glass">
-      <span class="avatar" :style="avatarGradient(session.currentUser.name)">
-        {{ nameInitials(session.currentUser.name) }}
-      </span>
+      <button type="button" class="avatar-button" :disabled="avatarSaving" aria-label="Изменить аватар" @click="avatarInput?.click()">
+        <UserAvatar :name="session.currentUser.name" :src="session.currentUser.avatarUrl" :size="64" />
+        <span class="avatar-edit" aria-hidden="true">
+          <Icon :name="avatarSaving ? 'lucide:loader-circle' : 'lucide:camera'" :class="{ spinning: avatarSaving }" />
+        </span>
+      </button>
+      <input ref="avatarInput" class="avatar-input" type="file" accept="image/jpeg,image/png,image/webp" @change="pickAvatar" />
       <div class="profile-info">
         <p class="profile-name">{{ session.currentUser.name }}</p>
-        <p class="profile-sub">В зале</p>
+        <button type="button" class="avatar-action" :disabled="avatarSaving" @click="avatarInput?.click()">
+          {{ session.currentUser.avatarUrl ? 'Изменить фото' : 'Добавить фото' }}
+        </button>
+        <button v-if="session.currentUser.avatarUrl" type="button" class="avatar-remove" :disabled="avatarSaving" @click="removeAvatar">
+          Удалить
+        </button>
       </div>
     </div>
 
@@ -103,7 +170,7 @@ async function removeFriend(id: number) {
       </div>
       <div v-if="friends && friends.length" class="friends glass">
         <div v-for="f in friends" :key="f.id" class="friend-row">
-          <span class="friend-avatar" :style="avatarGradient(f.name)">{{ nameInitials(f.name) }}</span>
+          <UserAvatar :name="f.name" :src="f.avatarUrl" :size="38" />
           <span class="friend-name">{{ f.name }}</span>
           <button type="button" class="friend-del" @click="removeFriend(f.id)">
             <Icon name="lucide:x" />
@@ -180,31 +247,30 @@ async function removeFriend(id: number) {
   padding: var(--space-4);
 }
 
-.avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 20px;
-  color: #fff;
-  flex-shrink: 0;
+.avatar-button { position: relative; flex-shrink: 0; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.avatar-button:disabled { cursor: wait; }
+.avatar-edit {
+  position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px;
+  display: grid; place-items: center; border: 2px solid var(--surface); border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); font-size: 12px;
 }
+.avatar-input { display: none; }
+.profile-info { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; column-gap: var(--space-2); }
 
 .profile-name {
+  flex-basis: 100%;
   margin: 0;
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
 }
 
-.profile-sub {
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-}
+.avatar-action, .avatar-remove { border: 0; background: none; padding: 3px 0; font-size: 12px; font-weight: 600; cursor: pointer; }
+.avatar-action { color: var(--accent); }
+.avatar-remove { color: var(--muted); }
+.avatar-action:disabled, .avatar-remove:disabled { opacity: .55; cursor: wait; }
+.spinning { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Settings block */
 .block {
@@ -301,19 +367,6 @@ async function removeFriend(id: number) {
   padding: var(--space-2) var(--space-3);
 
   &:not(:last-child) { border-bottom: 1px solid var(--glass-edge-flat); }
-}
-
-.friend-avatar {
-  width: 38px;
-  height: 38px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 15px;
-  color: #fff;
 }
 
 .friend-name {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 // Каталог загрузок: в проде — смонтированный том (UPLOADS_DIR), в dev — ./.uploads
@@ -26,4 +26,16 @@ export async function saveImage(data: Buffer, contentType: string): Promise<stri
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, name), data)
   return `/uploads/${name}`
+}
+
+// Удаляет только файл, ранее созданный saveImage; внешние URL не затрагивает.
+export async function removeUploadedImage(url: string | null | undefined): Promise<void> {
+  if (!url?.startsWith('/uploads/')) return
+  const name = url.slice('/uploads/'.length)
+  if (!/^[\w.-]+$/.test(name) || name.includes('..')) return
+  try {
+    await unlink(join(uploadsDir(), name))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
 }

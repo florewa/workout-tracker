@@ -8,6 +8,7 @@ export const users = pgTable('users', {
   telegramId: bigint('telegram_id', { mode: 'number' }).unique(),
   name: varchar('name', { length: 100 }).notNull(),
   username: varchar('username', { length: 100 }),
+  avatarUrl: text('avatar_url'),
   inviteToken: varchar('invite_token', { length: 64 }).unique(),
   // Напоминания о тренировке в боте (по умолчанию выкл.; включается в профиле)
   remindersEnabled: boolean('reminders_enabled').notNull().default(false),

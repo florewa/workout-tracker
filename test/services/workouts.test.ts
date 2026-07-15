@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
+import { users } from '~~/server/db/schema'
 import { createWorkout, listWorkouts, getWorkout, addMember } from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
@@ -35,5 +37,13 @@ describe('workouts', () => {
     await addMember(testDb, id, egor)
     const res = await getWorkout(testDb, id)
     expect(res!.members.length).toBe(2)
+  })
+
+  it('возвращает аватары участников', async () => {
+    const { danil } = await seedBaseline()
+    await testDb.update(users).set({ avatarUrl: '/uploads/danil.png' }).where(eq(users.id, danil))
+    const { id } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    const res = await getWorkout(testDb, id)
+    expect(res!.members[0].avatarUrl).toBe('/uploads/danil.png')
   })
 })

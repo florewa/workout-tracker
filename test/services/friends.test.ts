@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { users } from '~~/server/db/schema'
 import {
@@ -26,6 +27,13 @@ describe('addFriendship / listFriends', () => {
   it('пустой список без друзей', async () => {
     const { danil } = await seedBaseline()
     expect(await listFriends(testDb, danil)).toEqual([])
+  })
+
+  it('возвращает аватар друга', async () => {
+    const { danil, egor } = await seedBaseline()
+    await testDb.update(users).set({ avatarUrl: '/uploads/egor.jpg' }).where(eq(users.id, egor))
+    await addFriendship(testDb, danil, egor)
+    expect((await listFriends(testDb, danil))[0].avatarUrl).toBe('/uploads/egor.jpg')
   })
 })
 

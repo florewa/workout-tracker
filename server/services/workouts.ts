@@ -122,7 +122,7 @@ export async function getWorkout(executor: Executor, id: number) {
   if (!w) return null
   const [members, rows] = await Promise.all([
     executor
-      .select({ id: users.id, name: users.name })
+      .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
       .from(workoutMembers)
       .innerJoin(users, eq(workoutMembers.userId, users.id))
       .where(eq(workoutMembers.workoutId, id)),

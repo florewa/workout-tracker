@@ -15,7 +15,7 @@ export async function addFriendship(executor: Executor, a: number, b: number): P
   await executor.insert(friendships).values({ userLow: low, userHigh: high }).onConflictDoNothing()
 }
 
-export async function listFriends(executor: Executor, userId: number): Promise<{ id: number; name: string }[]> {
+export async function listFriends(executor: Executor, userId: number): Promise<{ id: number; name: string; avatarUrl: string | null }[]> {
   const rows = await executor
     .select({ low: friendships.userLow, high: friendships.userHigh })
     .from(friendships)
@@ -23,7 +23,7 @@ export async function listFriends(executor: Executor, userId: number): Promise<{
   const ids = rows.map((r) => (r.low === userId ? r.high : r.low))
   if (!ids.length) return []
   return executor
-    .select({ id: users.id, name: users.name })
+    .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
     .from(users)
     .where(inArray(users.id, ids))
     .orderBy(asc(users.name))
@@ -42,9 +42,9 @@ export async function acceptInvite(
   executor: Executor,
   token: string,
   meId: number,
-): Promise<{ id: number; name: string } | null> {
+): Promise<{ id: number; name: string; avatarUrl: string | null } | null> {
   const [inviter] = await executor
-    .select({ id: users.id, name: users.name })
+    .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
     .from(users)
     .where(eq(users.inviteToken, token))
     .limit(1)

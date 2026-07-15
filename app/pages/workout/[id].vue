@@ -1,5 +1,5 @@
 <script setup lang="ts">
-interface MemberLite { id: number; name: string }
+interface MemberLite { id: number; name: string; avatarUrl: string | null }
 interface DayExercise { id: number; name: string; order: number; targetSets: number | null; targetReps: string | null }
 interface SetRow {
   id: number; userId: number; exerciseId: number; exerciseName: string
@@ -448,6 +448,7 @@ async function cancel() {
             @click="selectedMemberId = m.id"
           >
             <span v-if="isOnline(m.id)" class="online-dot" :title="'В сети'" aria-hidden="true" />
+            <UserAvatar :name="m.name" :src="m.avatarUrl" :size="22" />
             {{ m.name }}
           </button>
         </div>
@@ -651,7 +652,7 @@ async function cancel() {
   align-items: center;
   gap: var(--space-2);
   min-height: 36px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-3) 0 7px;
   border: 1px solid var(--glass-edge-flat);
   border-radius: 999px;
   background: transparent;

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 
-interface UserLite { id: number; name: string }
+interface UserLite { id: number; name: string; avatarUrl: string | null }
 
 export const useSessionStore = defineStore('session', {
   state: () => ({

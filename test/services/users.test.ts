@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb } from '../helpers/db'
 import { users } from '~~/server/db/schema'
-import { resolveUser, isAllowed, parseAllowlist, listUsers } from '~~/server/services/users'
+import { resolveUser, isAllowed, parseAllowlist, listUsers, getAvatar, setAvatar } from '~~/server/services/users'
 
 beforeEach(async () => { await resetDb() })
 
@@ -36,6 +36,16 @@ describe('listUsers', () => {
     await testDb.insert(users).values([{ name: 'Егор' }, { name: 'Данил' }])
     const list = await listUsers(testDb)
     expect(list.map((u) => u.name)).toEqual(['Данил', 'Егор'])
+  })
+
+  it('возвращает аватар и позволяет его обновить и удалить', async () => {
+    const [user] = await testDb.insert(users).values({ name: 'Егор' }).returning({ id: users.id })
+    await setAvatar(testDb, user.id, '/uploads/egor.webp')
+    expect(await getAvatar(testDb, user.id)).toBe('/uploads/egor.webp')
+    expect((await listUsers(testDb))[0].avatarUrl).toBe('/uploads/egor.webp')
+
+    await setAvatar(testDb, user.id, null)
+    expect(await getAvatar(testDb, user.id)).toBeNull()
   })
 })
 

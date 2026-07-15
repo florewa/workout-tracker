@@ -1,5 +1,5 @@
 <script setup lang="ts">
-interface UserLite { id: number; name: string }
+interface UserLite { id: number; name: string; avatarUrl: string | null }
 const api = useApi()
 const session = useSessionStore()
 const route = useRoute()
@@ -67,7 +67,7 @@ async function go() {
         <span class="check" aria-hidden="true">
           <Icon name="lucide:check" class="check-icon" />
         </span>
-        <span class="avatar" :style="avatarGradient(u.name)">{{ nameInitials(u.name) }}</span>
+        <UserAvatar :name="u.name" :src="u.avatarUrl" :size="60" />
         <span class="name">{{ u.name }}</span>
       </button>
     </div>
@@ -188,19 +188,6 @@ async function go() {
   &.selected {
     box-shadow: inset 0 0 0 2px var(--accent), var(--glass-shadow);
   }
-}
-
-.avatar {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 22px;
-  color: #fff;
-  flex-shrink: 0;
 }
 
 .name {

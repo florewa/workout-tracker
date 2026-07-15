@@ -46,7 +46,7 @@ async function circleIds(executor: Executor, meId: number): Promise<number[]> {
 
 export interface CompetitionPayload {
   period: { key: PeriodKey; label: string; start: string }
-  participants: { id: number; name: string }[]
+  participants: { id: number; name: string; avatarUrl: string | null }[]
   exercises: { exerciseId: number; name: string }[]
   // По каждому упражнению — ряды для «гонки» и лидерборд
   byExercise: Record<number, {
@@ -72,7 +72,7 @@ export async function competition(
   const startKey = dayKey(start)
 
   const participants = await executor
-    .select({ id: users.id, name: users.name })
+    .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
     .from(users)
     .where(inArray(users.id, ids))
     .orderBy(asc(users.name))
