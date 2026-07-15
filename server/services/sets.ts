@@ -1,8 +1,16 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, ne, or, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
-import { sets, exercises } from '~~/server/db/schema'
+import { sets, exercises, exerciseVariations, workouts } from '~~/server/db/schema'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
+
+async function exerciseFamilyIds(executor: Executor, exerciseId: number): Promise<number[]> {
+  const aliasIds = await executor
+    .select({ id: exercises.id })
+    .from(exercises)
+    .where(eq(exercises.aliasOf, exerciseId))
+  return [exerciseId, ...aliasIds.map(row => row.id)]
+}
 
 export async function addSet(
   executor: Executor,
@@ -108,11 +116,7 @@ export async function lastSet(
   exerciseId: number,
 ): Promise<{ weight: number; reps: number } | null> {
   // учитываем алиасы: подходы могли писаться под дубль, указывающий alias_of на этот канон
-  const aliasIds = await executor
-    .select({ id: exercises.id })
-    .from(exercises)
-    .where(eq(exercises.aliasOf, exerciseId))
-  const ids = [exerciseId, ...aliasIds.map((r) => r.id)]
+  const ids = await exerciseFamilyIds(executor, exerciseId)
   const [row] = await executor
     .select({ weight: sets.weight, reps: sets.reps, variationId: sets.variationId })
     .from(sets)
@@ -120,4 +124,77 @@ export async function lastSet(
     .orderBy(desc(sets.createdAt), desc(sets.id))
     .limit(1)
   return row ?? null
+}
+
+export interface PreviousExerciseWorkout {
+  workoutId: number
+  date: Date
+  sets: Array<{
+    id: number
+    weight: number
+    reps: number
+    variationId: number | null
+    variationName: string | null
+  }>
+  bestSet: {
+    id: number
+    weight: number
+    reps: number
+    variationId: number | null
+    variationName: string | null
+  }
+}
+
+export async function previousExerciseWorkout(
+  executor: Executor,
+  userId: number,
+  exerciseId: number,
+  excludeWorkoutId?: number,
+): Promise<PreviousExerciseWorkout | null> {
+  const ids = await exerciseFamilyIds(executor, exerciseId)
+  const exerciseMatch = () => or(
+    inArray(sets.exerciseId, ids),
+    inArray(exerciseVariations.exerciseId, ids),
+  )
+
+  const filters = [
+    eq(sets.userId, userId),
+    eq(sets.skipped, false),
+    exerciseMatch(),
+  ]
+  if (excludeWorkoutId != null) filters.push(ne(sets.workoutId, excludeWorkoutId))
+
+  const [previous] = await executor
+    .select({ workoutId: workouts.id, date: workouts.date })
+    .from(sets)
+    .innerJoin(workouts, eq(workouts.id, sets.workoutId))
+    .leftJoin(exerciseVariations, eq(exerciseVariations.id, sets.variationId))
+    .where(and(...filters))
+    .groupBy(workouts.id)
+    .orderBy(desc(sql`coalesce(${workouts.startedAt}, ${workouts.date})`), desc(workouts.id))
+    .limit(1)
+  if (!previous) return null
+
+  const rows = await executor
+    .select({
+      id: sets.id,
+      weight: sets.weight,
+      reps: sets.reps,
+      variationId: sets.variationId,
+      variationName: exerciseVariations.name,
+    })
+    .from(sets)
+    .leftJoin(exerciseVariations, eq(exerciseVariations.id, sets.variationId))
+    .where(and(
+      eq(sets.workoutId, previous.workoutId),
+      eq(sets.userId, userId),
+      eq(sets.skipped, false),
+      exerciseMatch(),
+    ))
+    .orderBy(asc(sets.createdAt), asc(sets.id))
+
+  const bestSet = rows.reduce((best, row) => (
+    row.weight > best.weight || (row.weight === best.weight && row.reps > best.reps) ? row : best
+  ))
+  return { ...previous, sets: rows, bestSet }
 }

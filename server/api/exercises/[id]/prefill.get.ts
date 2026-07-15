@@ -9,5 +9,6 @@ export default defineEventHandler(async (event) => {
   if (!Number.isInteger(id) || id <= 0) throw createError({ statusCode: 400, statusMessage: 'Неверный id' })
   const userId = Number(getQuery(event).userId)
   if (!Number.isInteger(userId) || userId <= 0) throw createError({ statusCode: 400, statusMessage: 'userId обязателен' })
-  return prefillValue(db, userId, id)
+  const workoutId = Number(getQuery(event).workoutId)
+  return prefillValue(db, userId, id, Number.isInteger(workoutId) && workoutId > 0 ? workoutId : undefined)
 })

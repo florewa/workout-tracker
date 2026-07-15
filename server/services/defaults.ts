@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import { exerciseDefaults } from '~~/server/db/schema'
-import { lastSet } from '~~/server/services/sets'
+import { lastSet, previousExerciseWorkout } from '~~/server/services/sets'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
 
@@ -32,8 +32,12 @@ export async function prefillValue(
   executor: Executor,
   userId: number,
   exerciseId: number,
+  excludeWorkoutId?: number,
 ): Promise<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null> {
-  const last = await lastSet(executor, userId, exerciseId)
+  const previous = excludeWorkoutId == null
+    ? null
+    : await previousExerciseWorkout(executor, userId, exerciseId, excludeWorkoutId)
+  const last = previous?.bestSet ?? (excludeWorkoutId == null ? await lastSet(executor, userId, exerciseId) : null)
   if (last) return { weight: last.weight, reps: last.reps, variationId: last.variationId, source: 'last' }
   const def = await getDefault(executor, userId, exerciseId)
   if (def) return { weight: def.weight, reps: def.reps, variationId: null, source: 'default' }

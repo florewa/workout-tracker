@@ -29,4 +29,21 @@ describe('defaults', () => {
     const { egor, benchId } = await seedBaseline()
     expect(await prefillValue(testDb, egor, benchId)).toBeNull()
   })
+
+  it('prefill исключает подходы текущей тренировки', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const { id: previousId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 70, reps: 4 })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 60, reps: 8 })
+
+    const { id: currentId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await addSet(testDb, { workoutId: currentId, userId: danil, exerciseId: benchId, weight: 80, reps: 2 })
+
+    expect(await prefillValue(testDb, danil, benchId, currentId)).toEqual({
+      weight: 70,
+      reps: 4,
+      variationId: null,
+      source: 'last',
+    })
+  })
 })

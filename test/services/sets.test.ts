@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { sets } from '~~/server/db/schema'
 import { createWorkout } from '~~/server/services/workouts'
-import { addSet, deleteSet, lastSet, getSetOwnership, updateSet, reorderSets } from '~~/server/services/sets'
+import {
+  addSet, deleteSet, lastSet, getSetOwnership, updateSet, reorderSets, previousExerciseWorkout,
+} from '~~/server/services/sets'
 import { asc, eq } from 'drizzle-orm'
 
 beforeEach(async () => { await resetDb() })
@@ -29,6 +31,24 @@ describe('sets', () => {
   it('lastSet возвращает null, если подходов не было', async () => {
     const { egor, benchId } = await seedBaseline()
     expect(await lastSet(testDb, egor, benchId)).toBeNull()
+  })
+
+  it('previousExerciseWorkout возвращает все подходы предыдущей тренировки', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const { id: previousId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 60, reps: 8 })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 75, reps: 3 })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 70, reps: 4 })
+
+    const { id: currentId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await addSet(testDb, { workoutId: currentId, userId: danil, exerciseId: benchId, weight: 75, reps: 3 })
+
+    const result = await previousExerciseWorkout(testDb, danil, benchId, currentId)
+    expect(result?.workoutId).toBe(previousId)
+    expect(result?.sets.map(set => [set.weight, set.reps])).toEqual([
+      [60, 8], [75, 3], [70, 4],
+    ])
+    expect(result?.bestSet).toMatchObject({ weight: 75, reps: 3 })
   })
 
   it('deleteSet удаляет подход', async () => {

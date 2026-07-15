@@ -177,12 +177,61 @@ const weight = ref(20)
 const reps = ref(10)
 const prefill = ref<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(null)
 
+interface PreviousExerciseWorkout {
+  workoutId: number
+  date: string
+  sets: Array<{
+    id: number
+    weight: number
+    reps: number
+    variationId: number | null
+    variationName: string | null
+  }>
+  bestSet: {
+    id: number
+    weight: number
+    reps: number
+    variationId: number | null
+    variationName: string | null
+  }
+}
+
+const previousOpen = ref(false)
+const previousLoading = ref(false)
+const previousWorkout = ref<PreviousExerciseWorkout | null>(null)
+const previousTitle = ref('')
+const previousMember = ref('')
+
+async function openPreviousWorkout() {
+  if (!activeExerciseId.value || !selectedMemberId.value || previousLoading.value) return
+  previousTitle.value = activeExercise.value?.name ?? 'Упражнение'
+  previousMember.value = selectedMemberName.value
+  previousWorkout.value = null
+  previousOpen.value = true
+  previousLoading.value = true
+  try {
+    previousWorkout.value = await api.get<PreviousExerciseWorkout | null>(
+      `/api/exercises/${activeExerciseId.value}/previous`,
+      { userId: selectedMemberId.value, workoutId: id },
+    )
+  } catch {
+    toast('Не удалось загрузить прошлую тренировку', 'error')
+    previousOpen.value = false
+  } finally {
+    previousLoading.value = false
+  }
+}
+
+function closePreviousWorkout() {
+  previousOpen.value = false
+}
+
 watch(
   [activeExerciseId, selectedMemberId],
   async ([exId, memId]) => {
     if (!exId || !memId) { prefill.value = null; return }
     try {
-      prefill.value = await api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId })
+      prefill.value = await api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId, workoutId: id })
     } catch {
       prefill.value = null
     }
@@ -501,11 +550,22 @@ async function cancel() {
           </div>
         </div>
 
-        <p class="last-hint">
-          <template v-if="prefill && prefill.source === 'last'">Прошлый раз: <b>{{ prefill.weight }}</b> × <b>{{ prefill.reps }}</b></template>
-          <template v-else-if="prefill && prefill.source === 'default'">База: <b>{{ prefill.weight }}</b> × <b>{{ prefill.reps }}</b></template>
-          <template v-else>Прошлый раз — нет данных</template>
-        </p>
+        <div class="last-row">
+          <p class="last-hint">
+            <template v-if="prefill && prefill.source === 'last'">Прошлый максимум: <b>{{ prefill.weight }}</b> × <b>{{ prefill.reps }}</b></template>
+            <template v-else-if="prefill && prefill.source === 'default'">База: <b>{{ prefill.weight }}</b> × <b>{{ prefill.reps }}</b></template>
+            <template v-else>Прошлый раз — нет данных</template>
+          </p>
+          <button
+            v-if="prefill?.source === 'last'"
+            type="button"
+            class="last-info"
+            aria-label="Показать подходы прошлой тренировки"
+            @click="openPreviousWorkout"
+          >
+            <Icon name="lucide:info" />
+          </button>
+        </div>
 
         <div ref="steppersEl" class="steppers">
           <div class="stepper">
@@ -577,6 +637,54 @@ async function cancel() {
       </template>
     </div>
   </section>
+
+  <Teleport to="body">
+    <Transition name="previous-modal">
+      <div v-if="previousOpen" class="previous-backdrop" @click.self="closePreviousWorkout">
+        <div class="previous-dialog glass" role="dialog" aria-modal="true" aria-labelledby="previous-title">
+          <div class="previous-head">
+            <div class="previous-heading">
+              <span class="previous-kicker">Прошлая тренировка</span>
+              <h2 id="previous-title" class="previous-title">{{ previousTitle }}</h2>
+              <p v-if="previousWorkout" class="previous-meta">
+                {{ dateWithWeekday(previousWorkout.date, { year: true }) }}<template v-if="data && data.members.length > 1"> · {{ previousMember }}</template>
+              </p>
+            </div>
+            <button type="button" class="previous-close" aria-label="Закрыть" @click="closePreviousWorkout">
+              <Icon name="lucide:x" />
+            </button>
+          </div>
+
+          <div v-if="previousLoading" class="previous-loading">
+            <Icon name="lucide:loader-circle" />
+            Загружаю подходы
+          </div>
+          <div v-else-if="previousWorkout?.sets.length" class="previous-sets">
+            <div
+              v-for="(set, index) in previousWorkout.sets"
+              :key="set.id"
+              class="previous-set"
+              :class="{ best: set.id === previousWorkout.bestSet.id }"
+            >
+              <span class="previous-number">{{ index + 1 }}</span>
+              <div class="previous-value">
+                <span><b>{{ set.weight }}</b> кг</span>
+                <span class="previous-mul">×</span>
+                <span><b>{{ set.reps }}</b> повт.</span>
+                <span v-if="set.id === previousWorkout.bestSet.id" class="previous-best">Максимум</span>
+              </div>
+              <span v-if="set.variationName" class="previous-variation">{{ set.variationName }}</span>
+            </div>
+          </div>
+          <p v-else class="previous-empty">Подходы прошлой тренировки не найдены.</p>
+
+          <p v-if="previousWorkout?.sets.length" class="previous-note">
+            В строке «Прошлый максимум» показан подход с максимальным весом. При равном весе — с большим числом повторений.
+          </p>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped lang="scss">
@@ -755,11 +863,34 @@ async function cancel() {
   color: var(--muted);
 }
 
+.last-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .last-hint {
   margin: 0;
   font-size: 14px;
   color: var(--muted);
   b { color: var(--text); font-weight: 700; }
+}
+
+.last-info {
+  padding: 0;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--glass-edge-flat);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  cursor: pointer;
+
+  &:active { transform: scale(0.92); }
 }
 
 .record-row {
@@ -967,4 +1098,175 @@ async function cancel() {
 }
 
 .cta { width: 100%; margin-top: auto; display: flex; flex-direction: column; gap: var(--space-2); }
+
+.previous-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  align-items: end;
+  padding: var(--space-4);
+  padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.previous-dialog {
+  width: 100%;
+  max-width: 420px;
+  max-height: min(76vh, 620px);
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow-y: auto;
+}
+
+.previous-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.previous-heading { min-width: 0; }
+
+.previous-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.previous-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.previous-meta {
+  margin: var(--space-1) 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.previous-close {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.previous-loading,
+.previous-empty {
+  margin: 0;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.previous-loading :deep(svg) { animation: previous-spin 0.8s linear infinite; }
+
+.previous-sets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.previous-set {
+  min-height: 54px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  column-gap: var(--space-3);
+
+  &.best { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 58%, transparent); }
+}
+
+.previous-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.previous-value {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 14px;
+
+  b {
+    font-family: var(--font-display);
+    color: var(--text);
+    font-size: 17px;
+  }
+}
+
+.previous-mul { color: var(--accent); font-weight: 800; }
+
+.previous-best {
+  margin-left: auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.previous-variation {
+  grid-column: 2;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.previous-note {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--glass-edge-flat);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.previous-modal-enter-active,
+.previous-modal-leave-active { transition: opacity 0.18s ease; }
+.previous-modal-enter-from,
+.previous-modal-leave-to { opacity: 0; }
+.previous-modal-enter-active .previous-dialog,
+.previous-modal-leave-active .previous-dialog { transition: transform 0.18s ease; }
+.previous-modal-enter-from .previous-dialog,
+.previous-modal-leave-to .previous-dialog { transform: translateY(18px); }
+
+@keyframes previous-spin { to { transform: rotate(360deg); } }
 </style>
