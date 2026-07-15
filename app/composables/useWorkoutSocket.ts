@@ -26,7 +26,7 @@ export function useWorkoutSocket(workoutId: number, onChange: () => void) {
     ws.onmessage = (e) => {
       let msg: { type?: string; users?: PresenceUser[] }
       try { msg = JSON.parse(e.data) } catch { return }
-      if (msg.type === 'sets-changed') onChange()
+      if (msg.type === 'sets-changed' || msg.type === 'workout-changed') onChange()
       else if (msg.type === 'presence') online.value = msg.users ?? []
     }
     ws.onclose = () => { online.value = []; scheduleReconnect() }

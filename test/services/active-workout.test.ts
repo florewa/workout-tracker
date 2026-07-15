@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { workouts } from '~~/server/db/schema'
-import { createWorkout, getActiveWorkout } from '~~/server/services/workouts'
+import {
+  createWorkout, getActiveWorkout, isWorkoutMember, listPendingWorkoutInvites, respondToWorkoutInvite,
+} from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
 
@@ -36,5 +38,57 @@ describe('getActiveWorkout', () => {
     await createWorkout(testDb, { createdBy: danil, memberIds: [] })
     const result = await getActiveWorkout(testDb, egor)
     expect(result).toBeNull()
+  })
+
+  it('не делает приглашение активным до подтверждения', async () => {
+    const { danil, egor } = await seedBaseline()
+    const { id } = await createWorkout(testDb, {
+      createdBy: danil,
+      memberIds: [egor],
+      recordMode: 'each',
+    })
+
+    expect(await getActiveWorkout(testDb, egor)).toBeNull()
+    const invites = await listPendingWorkoutInvites(testDb, egor)
+    expect(invites).toHaveLength(1)
+    expect(invites[0]).toMatchObject({ workoutId: id, inviterName: 'Данил' })
+  })
+
+  it('делает тренировку активной после принятия приглашения', async () => {
+    const { danil, egor } = await seedBaseline()
+    const { id } = await createWorkout(testDb, {
+      createdBy: danil,
+      memberIds: [egor],
+      recordMode: 'each',
+    })
+
+    expect(await respondToWorkoutInvite(testDb, id, egor, true)).toBe(true)
+    expect((await getActiveWorkout(testDb, egor))?.id).toBe(id)
+    expect(await listPendingWorkoutInvites(testDb, egor)).toHaveLength(0)
+  })
+
+  it('убирает участника после отказа от приглашения', async () => {
+    const { danil, egor } = await seedBaseline()
+    const { id } = await createWorkout(testDb, {
+      createdBy: danil,
+      memberIds: [egor],
+      recordMode: 'each',
+    })
+
+    expect(await respondToWorkoutInvite(testDb, id, egor, false)).toBe(true)
+    expect(await isWorkoutMember(testDb, id, egor)).toBe(false)
+    expect(await listPendingWorkoutInvites(testDb, egor)).toHaveLength(0)
+  })
+
+  it('режим «я за всех» не требует подтверждения', async () => {
+    const { danil, egor } = await seedBaseline()
+    const { id } = await createWorkout(testDb, {
+      createdBy: danil,
+      memberIds: [egor],
+      recordMode: 'single',
+    })
+
+    expect((await getActiveWorkout(testDb, egor))?.id).toBe(id)
+    expect(await listPendingWorkoutInvites(testDb, egor)).toHaveLength(0)
   })
 })

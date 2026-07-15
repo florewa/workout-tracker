@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { users } from '~~/server/db/schema'
-import { createWorkout, listWorkouts, getWorkout, addMember } from '~~/server/services/workouts'
+import {
+  createWorkout, listWorkouts, getWorkout, addMember, respondToWorkoutInvite,
+} from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
 
@@ -45,5 +47,18 @@ describe('workouts', () => {
     const { id } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
     const res = await getWorkout(testDb, id)
     expect(res!.members[0].avatarUrl).toBe('/uploads/danil.png')
+  })
+
+  it('не показывает приглашённому тренировку в истории до принятия', async () => {
+    const { danil, egor } = await seedBaseline()
+    const { id } = await createWorkout(testDb, {
+      createdBy: danil,
+      memberIds: [egor],
+      recordMode: 'each',
+    })
+
+    expect(await listWorkouts(testDb, { memberId: egor })).toHaveLength(0)
+    await respondToWorkoutInvite(testDb, id, egor, true)
+    expect(await listWorkouts(testDb, { memberId: egor })).toHaveLength(1)
   })
 })

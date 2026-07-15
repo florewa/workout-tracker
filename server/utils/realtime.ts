@@ -55,3 +55,7 @@ export function broadcastPresence(workoutId: number): void {
 export function broadcastSetsChanged(workoutId: number): void {
   broadcast(workoutId, { type: 'sets-changed' })
 }
+
+export function broadcastWorkoutChanged(workoutId: number): void {
+  broadcast(workoutId, { type: 'workout-changed' })
+}

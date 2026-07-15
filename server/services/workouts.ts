@@ -1,7 +1,7 @@
-import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNull, notExists, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import {
-  workouts, workoutMembers, sets, users, exercises, programDays, exerciseVariations,
+  workouts, workoutMembers, workoutInvites, sets, users, exercises, programDays, exerciseVariations,
 } from '~~/server/db/schema'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
@@ -23,7 +23,87 @@ export async function createWorkout(
     for (const userId of ids) {
       await tx.insert(workoutMembers).values({ workoutId: w.id, userId }).onConflictDoNothing()
     }
+    if ((input.recordMode ?? 'each') === 'each') {
+      const invitedIds = [...ids].filter(userId => userId !== input.createdBy)
+      if (invitedIds.length) {
+        await tx.insert(workoutInvites).values(
+          invitedIds.map(userId => ({ workoutId: w.id, userId })),
+        ).onConflictDoNothing()
+      }
+    }
     return { id: w.id }
+  })
+}
+
+export async function listPendingWorkoutInvites(executor: Executor, userId: number) {
+  return executor
+    .select({
+      workoutId: workoutInvites.workoutId,
+      inviterId: users.id,
+      inviterName: users.name,
+      dayCode: programDays.code,
+      createdAt: workoutInvites.createdAt,
+    })
+    .from(workoutInvites)
+    .innerJoin(workouts, eq(workouts.id, workoutInvites.workoutId))
+    .innerJoin(users, eq(users.id, workouts.createdBy))
+    .leftJoin(programDays, eq(programDays.id, workouts.dayId))
+    .where(and(
+      eq(workoutInvites.userId, userId),
+      eq(workoutInvites.status, 'pending'),
+      isNull(workouts.finishedAt),
+      gt(workouts.startedAt, sql`now() - interval '18 hours'`),
+    ))
+    .orderBy(desc(workoutInvites.createdAt))
+}
+
+export async function getWorkoutInviteRecipients(executor: Executor, workoutId: number) {
+  const rows = await executor
+    .select({ userId: users.id, name: users.name, telegramId: users.telegramId })
+    .from(workoutInvites)
+    .innerJoin(users, eq(users.id, workoutInvites.userId))
+    .where(and(eq(workoutInvites.workoutId, workoutId), eq(workoutInvites.status, 'pending')))
+  return rows.filter((row): row is { userId: number; name: string; telegramId: number } => row.telegramId != null)
+}
+
+export async function respondToWorkoutInvite(
+  executor: Executor,
+  workoutId: number,
+  userId: number,
+  accept: boolean,
+): Promise<boolean> {
+  return executor.transaction(async (tx) => {
+    const [invite] = await tx
+      .select({ status: workoutInvites.status })
+      .from(workoutInvites)
+      .innerJoin(workouts, eq(workouts.id, workoutInvites.workoutId))
+      .where(and(
+        eq(workoutInvites.workoutId, workoutId),
+        eq(workoutInvites.userId, userId),
+        isNull(workouts.finishedAt),
+        gt(workouts.startedAt, sql`now() - interval '18 hours'`),
+      ))
+      .limit(1)
+
+    if (!invite) return false
+    if (invite.status === 'accepted') return accept
+    if (invite.status !== 'pending') return false
+
+    await tx.update(workoutInvites)
+      .set({ status: accept ? 'accepted' : 'declined', respondedAt: new Date() })
+      .where(and(
+        eq(workoutInvites.workoutId, workoutId),
+        eq(workoutInvites.userId, userId),
+        eq(workoutInvites.status, 'pending'),
+      ))
+
+    if (!accept) {
+      await tx.delete(workoutMembers).where(and(
+        eq(workoutMembers.workoutId, workoutId),
+        eq(workoutMembers.userId, userId),
+      ))
+    }
+    return true
   })
 }
 
@@ -31,7 +111,20 @@ export async function listWorkouts(executor: Executor, opts: { limit?: number; m
   const own = opts.memberId
     ? inArray(
         workouts.id,
-        executor.select({ wid: workoutMembers.workoutId }).from(workoutMembers).where(eq(workoutMembers.userId, opts.memberId)),
+        executor.select({ wid: workoutMembers.workoutId })
+          .from(workoutMembers)
+          .where(and(
+            eq(workoutMembers.userId, opts.memberId),
+            notExists(
+              executor.select({ workoutId: workoutInvites.workoutId })
+                .from(workoutInvites)
+                .where(and(
+                  eq(workoutInvites.workoutId, workoutMembers.workoutId),
+                  eq(workoutInvites.userId, opts.memberId),
+                  eq(workoutInvites.status, 'pending'),
+                )),
+            ),
+          )),
       )
     : undefined
   return executor
@@ -66,6 +159,15 @@ export async function getActiveWorkout(
       eq(workoutMembers.userId, userId),
       isNull(workouts.finishedAt),
       gt(workouts.startedAt, sql`now() - interval '18 hours'`),
+      notExists(
+        executor.select({ workoutId: workoutInvites.workoutId })
+          .from(workoutInvites)
+          .where(and(
+            eq(workoutInvites.workoutId, workouts.id),
+            eq(workoutInvites.userId, userId),
+            eq(workoutInvites.status, 'pending'),
+          )),
+      ),
     ))
     .orderBy(desc(workouts.startedAt))
     .limit(1)

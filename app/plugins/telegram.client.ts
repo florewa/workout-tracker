@@ -14,6 +14,10 @@ export default defineNuxtPlugin(() => {
   } catch {
     startParam = ''
   }
+  if (!startParam) {
+    const workoutId = new URLSearchParams(window.location.search).get('workout')
+    if (workoutId && /^\d+$/.test(workoutId)) startParam = `workout_${workoutId}`
+  }
   useState<string>('tgInitData', () => '').value = initData
   useState<string>('tgStartParam', () => '').value = startParam
 

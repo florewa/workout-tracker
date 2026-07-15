@@ -58,6 +58,8 @@ location / {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
 }
 ```
 ```bash
@@ -65,11 +67,11 @@ sudo nginx -t && sudo systemctl reload nginx   # reload не роняет ост
 ```
 
 ## 7. Telegram-бот (@BotFather)
-1. `/newbot` → имя + username → **BOT_TOKEN**. Username без `@` → **BOT_USERNAME**. Вписать в `.env`.
+1. `/newbot` → имя + username → **BOT_TOKEN**. Username без `@` → **BOT_USERNAME**. Вписать в `.env`. В **WEB_APP_URL** указать публичный HTTPS-адрес приложения.
 2. Mini App: `/newapp` → выбрать бота → заголовок/описание/фото → **Web App URL = https://podhod.itlabs.top** → короткое имя.
    (Либо `/mybots` → Bot Settings → Menu Button → задать URL.)
 3. **ALLOWLIST**: свои Telegram-ID (узнать у `@userinfobot`) через запятую в `.env` — пускать только круг.
-4. Перечитать env приложением:
+4. Перечитать env приложением. При старте приложение само добавит в меню бота постоянную кнопку **«Открыть приложение»**:
 ```bash
 docker compose -f docker-compose.prod.yml up -d --force-recreate app
 ```

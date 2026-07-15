@@ -101,6 +101,19 @@ export const workoutMembers = pgTable('workout_members', {
   pk: primaryKey({ columns: [t.workoutId, t.userId] }),
 }))
 
+// При режиме «каждый сам» приглашённый подтверждает участие перед тем,
+// как тренировка становится для него активной.
+export const workoutInvites = pgTable('workout_invites', {
+  workoutId: integer('workout_id').notNull().references(() => workouts.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  status: varchar('status', { length: 12 }).notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  respondedAt: timestamp('responded_at', { withTimezone: true }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.workoutId, t.userId] }),
+  pendingIdx: index('workout_invites_user_status_idx').on(t.userId, t.status),
+}))
+
 // Вариации упражнения (один и тот же движок, разный снаряд: гантели/тренажёр)
 export const exerciseVariations = pgTable('exercise_variations', {
   id: serial('id').primaryKey(),

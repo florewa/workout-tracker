@@ -12,7 +12,7 @@ export const testDb = drizzle(client, { schema })
 
 export async function resetDb(): Promise<void> {
   await testDb.execute(sql`
-    TRUNCATE TABLE sets, workout_members, workouts, program_schedules, program_exercises,
+    TRUNCATE TABLE sets, workout_invites, workout_members, workouts, program_schedules, program_exercises,
       program_days, exercises, users RESTART IDENTITY CASCADE
   `)
 }
