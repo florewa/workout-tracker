@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import type { db as dbType } from '~~/server/db/client'
-import { sets, exercises, friendships, users } from '~~/server/db/schema'
+import { sets, exercises, friendships, users, workouts } from '~~/server/db/schema'
 import { e1rm, tonnage } from '~~/server/utils/metrics'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
@@ -90,9 +90,10 @@ export async function competition(
       createdAt: sets.createdAt,
     })
     .from(sets)
+    .innerJoin(workouts, eq(workouts.id, sets.workoutId))
     .innerJoin(exercises, eq(exercises.id, sets.exerciseId))
     .innerJoin(canon, eq(canon.id, sql`coalesce(${exercises.aliasOf}, ${exercises.id})`))
-    .where(and(inArray(sets.userId, ids), eq(sets.skipped, false)))
+    .where(and(inArray(sets.userId, ids), eq(sets.skipped, false), isNull(workouts.deletedAt)))
     .orderBy(asc(sets.createdAt), asc(sets.id))
 
   // Группировка: упражнение -> участник -> дни (лучший e1RM за день) + PR/посещаемость/тоннаж

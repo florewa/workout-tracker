@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import { sets, exercises, exerciseVariations, workouts } from '~~/server/db/schema'
 
@@ -120,7 +120,13 @@ export async function lastSet(
   const [row] = await executor
     .select({ weight: sets.weight, reps: sets.reps, variationId: sets.variationId })
     .from(sets)
-    .where(and(eq(sets.userId, userId), inArray(sets.exerciseId, ids), eq(sets.skipped, false)))
+    .innerJoin(workouts, eq(workouts.id, sets.workoutId))
+    .where(and(
+      eq(sets.userId, userId),
+      inArray(sets.exerciseId, ids),
+      eq(sets.skipped, false),
+      isNull(workouts.deletedAt),
+    ))
     .orderBy(desc(sets.createdAt), desc(sets.id))
     .limit(1)
   return row ?? null
@@ -160,6 +166,7 @@ export async function previousExerciseWorkout(
   const filters = [
     eq(sets.userId, userId),
     eq(sets.skipped, false),
+    isNull(workouts.deletedAt),
     exerciseMatch(),
   ]
   if (excludeWorkoutId != null) filters.push(ne(sets.workoutId, excludeWorkoutId))

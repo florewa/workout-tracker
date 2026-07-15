@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, notExists, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, notExists, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import {
   workouts, workoutMembers, workoutInvites, workoutExtraExercises, sets, users, exercises,
@@ -86,6 +86,7 @@ export async function listPendingWorkoutInvites(executor: Executor, userId: numb
       eq(workoutInvites.userId, userId),
       eq(workoutInvites.status, 'pending'),
       isNull(workouts.finishedAt),
+      isNull(workouts.deletedAt),
       gt(workouts.startedAt, sql`now() - interval '18 hours'`),
     ))
     .orderBy(desc(workoutInvites.createdAt))
@@ -115,6 +116,7 @@ export async function respondToWorkoutInvite(
         eq(workoutInvites.workoutId, workoutId),
         eq(workoutInvites.userId, userId),
         isNull(workouts.finishedAt),
+        isNull(workouts.deletedAt),
         gt(workouts.startedAt, sql`now() - interval '18 hours'`),
       ))
       .limit(1)
@@ -176,7 +178,7 @@ export async function listWorkouts(executor: Executor, opts: { limit?: number; m
     .leftJoin(workoutMembers, eq(workoutMembers.workoutId, workouts.id))
     .leftJoin(sets, eq(sets.workoutId, workouts.id))
     .leftJoin(programDays, eq(programDays.id, workouts.dayId))
-    .where(own)
+    .where(and(own, isNull(workouts.deletedAt)))
     .groupBy(workouts.id, programDays.code)
     .orderBy(desc(workouts.date))
     .limit(opts.limit ?? 50)
@@ -193,6 +195,7 @@ export async function getActiveWorkout(
     .where(and(
       eq(workoutMembers.userId, userId),
       isNull(workouts.finishedAt),
+      isNull(workouts.deletedAt),
       gt(workouts.startedAt, sql`now() - interval '18 hours'`),
       notExists(
         executor.select({ workoutId: workoutInvites.workoutId })
@@ -209,11 +212,21 @@ export async function getActiveWorkout(
   return row ?? null
 }
 
-export async function isWorkoutMember(executor: Executor, workoutId: number, userId: number): Promise<boolean> {
+export async function isWorkoutMember(
+  executor: Executor,
+  workoutId: number,
+  userId: number,
+  includeDeleted = false,
+): Promise<boolean> {
   const [row] = await executor
     .select({ userId: workoutMembers.userId })
     .from(workoutMembers)
-    .where(and(eq(workoutMembers.workoutId, workoutId), eq(workoutMembers.userId, userId)))
+    .innerJoin(workouts, eq(workouts.id, workoutMembers.workoutId))
+    .where(and(
+      eq(workoutMembers.workoutId, workoutId),
+      eq(workoutMembers.userId, userId),
+      includeDeleted ? undefined : isNull(workouts.deletedAt),
+    ))
     .limit(1)
   return Boolean(row)
 }
@@ -227,7 +240,63 @@ export async function countWorkoutSets(executor: Executor, workoutId: number): P
 }
 
 export async function finishWorkout(executor: Executor, id: number): Promise<void> {
-  await executor.update(workouts).set({ finishedAt: new Date() }).where(eq(workouts.id, id))
+  await executor.update(workouts).set({ finishedAt: new Date() }).where(and(eq(workouts.id, id), isNull(workouts.deletedAt)))
+}
+
+export async function trashWorkout(executor: Executor, id: number): Promise<boolean> {
+  const rows = await executor
+    .update(workouts)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(workouts.id, id), isNull(workouts.deletedAt)))
+    .returning({ id: workouts.id })
+  return rows.length > 0
+}
+
+export async function restoreWorkout(executor: Executor, id: number): Promise<boolean> {
+  const rows = await executor
+    .update(workouts)
+    .set({ deletedAt: null })
+    .where(and(
+      eq(workouts.id, id),
+      isNotNull(workouts.deletedAt),
+      gt(workouts.deletedAt, sql`now() - interval '7 days'`),
+    ))
+    .returning({ id: workouts.id })
+  return rows.length > 0
+}
+
+export async function listDeletedWorkouts(executor: Executor, userId: number) {
+  return executor
+    .select({
+      id: workouts.id,
+      date: workouts.date,
+      dayCode: programDays.code,
+      deletedAt: workouts.deletedAt,
+      expiresAt: sql<Date>`${workouts.deletedAt} + interval '7 days'`,
+      setCount: sql<number>`count(distinct ${sets.id})`.mapWith(Number),
+    })
+    .from(workouts)
+    .innerJoin(workoutMembers, and(
+      eq(workoutMembers.workoutId, workouts.id),
+      eq(workoutMembers.userId, userId),
+    ))
+    .leftJoin(sets, eq(sets.workoutId, workouts.id))
+    .leftJoin(programDays, eq(programDays.id, workouts.dayId))
+    .where(and(
+      isNotNull(workouts.deletedAt),
+      gt(workouts.deletedAt, sql`now() - interval '7 days'`),
+    ))
+    .groupBy(workouts.id, programDays.code)
+    .orderBy(desc(workouts.deletedAt))
+}
+
+export async function purgeExpiredWorkouts(executor: Executor): Promise<number> {
+  const expired = await executor
+    .select({ id: workouts.id })
+    .from(workouts)
+    .where(and(isNotNull(workouts.deletedAt), lt(workouts.deletedAt, sql`now() - interval '7 days'`)))
+  for (const workout of expired) await deleteWorkout(executor, workout.id)
+  return expired.length
 }
 
 /** Удаляет тренировку с участниками и подходами */
@@ -323,7 +392,7 @@ export function calculateExerciseDurations(
 }
 
 export async function getWorkout(executor: Executor, id: number) {
-  const [w] = await executor.select().from(workouts).where(eq(workouts.id, id)).limit(1)
+  const [w] = await executor.select().from(workouts).where(and(eq(workouts.id, id), isNull(workouts.deletedAt))).limit(1)
   if (!w) return null
   const [members, rows, extraExercises] = await Promise.all([
     executor

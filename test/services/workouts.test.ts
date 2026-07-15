@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { exercises, users } from '~~/server/db/schema'
+import { exercises, sets, users, workouts } from '~~/server/db/schema'
 import {
   createWorkout, listWorkouts, getWorkout, addMember, respondToWorkoutInvite,
-  calculateExerciseDurations, addWorkoutExercise,
+  calculateExerciseDurations, addWorkoutExercise, listDeletedWorkouts, purgeExpiredWorkouts,
+  restoreWorkout, trashWorkout,
 } from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
@@ -76,6 +77,40 @@ describe('workouts', () => {
     expect(workout?.extraExercises).toEqual([
       expect.objectContaining({ id: squat.id, name: 'Приседания со штангой', order: 1 }),
     ])
+  })
+
+  it('перемещает тренировку в корзину и восстанавливает её', async () => {
+    const { danil, dayId, benchId } = await seedBaseline()
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+    await testDb.insert(sets).values({
+      workoutId: id, userId: danil, exerciseId: benchId, setOrder: 1, weight: 60, reps: 8,
+    })
+
+    expect(await trashWorkout(testDb, id)).toBe(true)
+    expect(await listWorkouts(testDb, { memberId: danil })).toHaveLength(0)
+    expect(await getWorkout(testDb, id)).toBeNull()
+    expect(await listDeletedWorkouts(testDb, danil)).toEqual([
+      expect.objectContaining({ id, setCount: 1 }),
+    ])
+
+    expect(await restoreWorkout(testDb, id)).toBe(true)
+    expect(await listWorkouts(testDb, { memberId: danil })).toHaveLength(1)
+    expect(await getWorkout(testDb, id)).not.toBeNull()
+  })
+
+  it('безвозвратно удаляет тренировки старше семи дней', async () => {
+    const { danil, dayId, benchId } = await seedBaseline()
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+    await testDb.insert(sets).values({
+      workoutId: id, userId: danil, exerciseId: benchId, setOrder: 1, weight: 60, reps: 8,
+    })
+    await testDb.update(workouts)
+      .set({ deletedAt: new Date(Date.now() - 8 * 86_400_000) })
+      .where(eq(workouts.id, id))
+
+    expect(await purgeExpiredWorkouts(testDb)).toBe(1)
+    expect(await testDb.select().from(workouts).where(eq(workouts.id, id))).toHaveLength(0)
+    expect(await testDb.select().from(sets).where(eq(sets.workoutId, id))).toHaveLength(0)
   })
 
   it('считает интервалы упражнений отдельно для каждого участника', () => {

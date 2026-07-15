@@ -1,7 +1,7 @@
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import type { db as dbType } from '~~/server/db/client'
-import { sets, exercises, favoriteExercises } from '~~/server/db/schema'
+import { sets, exercises, favoriteExercises, workouts } from '~~/server/db/schema'
 import { e1rm, tonnage } from '~~/server/utils/metrics'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
@@ -40,9 +40,10 @@ export async function exerciseProgress(executor: Executor, userId: number): Prom
       createdAt: sets.createdAt,
     })
     .from(sets)
+    .innerJoin(workouts, eq(workouts.id, sets.workoutId))
     .innerJoin(exercises, eq(exercises.id, sets.exerciseId))
     .innerJoin(canon, eq(canon.id, sql`coalesce(${exercises.aliasOf}, ${exercises.id})`))
-    .where(and(eq(sets.userId, userId), eq(sets.skipped, false)))
+    .where(and(eq(sets.userId, userId), eq(sets.skipped, false), isNull(workouts.deletedAt)))
     .orderBy(asc(sets.createdAt), asc(sets.id))
 
   const favorites = await executor

@@ -100,6 +100,7 @@ export const workouts = pgTable('workouts', {
   recordMode: varchar('record_mode', { length: 10 }).notNull().default('each'),
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (t) => ({
   dateIdx: index('workouts_date_idx').on(t.date),
 }))

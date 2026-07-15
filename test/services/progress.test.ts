@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { sets, exercises } from '~~/server/db/schema'
-import { createWorkout } from '~~/server/services/workouts'
+import { createWorkout, trashWorkout } from '~~/server/services/workouts'
 import { exerciseProgress } from '~~/server/services/progress'
 import { setExerciseFavorite } from '~~/server/services/favorites'
 import { e1rm } from '~~/server/utils/metrics'
@@ -32,6 +32,17 @@ describe('exerciseProgress', () => {
 
   it('пустой результат без подходов', async () => {
     const { danil } = await seedBaseline()
+    expect(await exerciseProgress(testDb, danil)).toEqual([])
+  })
+
+  it('не учитывает подходы тренировки из корзины', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await testDb.insert(sets).values({
+      workoutId: wId, userId: danil, exerciseId: benchId, setOrder: 1, weight: 60, reps: 8,
+    })
+    await trashWorkout(testDb, wId)
+
     expect(await exerciseProgress(testDb, danil)).toEqual([])
   })
 

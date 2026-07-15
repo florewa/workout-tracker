@@ -36,14 +36,19 @@ function open(id: number) { navigateTo(`/workout/${id}`) }
 async function remove(w: WorkoutRow) {
   const ok = await confirm({
     title: 'Удалить тренировку?',
-    message: `${w.dayCode ?? 'Тренировка'} · ${dateLabel(w.date)}. Все подходы будут удалены без возможности восстановить.`,
+    message: `${w.dayCode ?? 'Тренировка'} · ${dateLabel(w.date)}. Она переместится в корзину профиля, откуда её можно восстановить в течение 7 дней.`,
     confirmText: 'Удалить',
     danger: true,
   })
   if (!ok) return
   try {
-    await api.del(`/api/workouts/${w.id}`)
+    await api.post(`/api/workouts/${w.id}/trash`)
     await refresh()
+    clearNuxtData('deleted-workouts')
+    clearNuxtData('active-workout')
+    clearNuxtData('competition')
+    clearNuxtData('personal-progress')
+    toast('Тренировка перемещена в корзину', 'success')
   } catch {
     toast('Не удалось удалить', 'error')
   }

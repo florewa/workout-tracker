@@ -1,5 +1,13 @@
 <script setup lang="ts">
 interface UserLite { id: number; name: string; avatarUrl: string | null }
+interface DeletedWorkout {
+  id: number
+  date: string
+  dayCode: string | null
+  deletedAt: string
+  expiresAt: string
+  setCount: number
+}
 
 const theme = useThemeStore()
 const session = useSessionStore()
@@ -18,6 +26,47 @@ const { data: friends, refresh: refreshFriends } = await useAsyncData(
   () => api.get<UserLite[]>('/api/friends'),
   { server: false },
 )
+const { data: deletedWorkouts, refresh: refreshDeletedWorkouts } = await useAsyncData(
+  'deleted-workouts',
+  () => api.get<DeletedWorkout[]>('/api/workouts/trash'),
+  { server: false },
+)
+const restoringWorkoutId = ref<number | null>(null)
+
+function workoutDate(iso: string): string {
+  return dateWithWeekday(iso, { year: true })
+}
+
+function daysUntilRemoval(expiresAt: string): number {
+  return Math.max(1, Math.ceil((Date.parse(expiresAt) - Date.now()) / 86_400_000))
+}
+
+function daysUntilRemovalLabel(expiresAt: string): string {
+  const days = daysUntilRemoval(expiresAt)
+  const mod10 = days % 10
+  const mod100 = days % 100
+  const word = mod10 === 1 && mod100 !== 11 ? 'день' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'дня' : 'дней'
+  return `${days} ${word}`
+}
+
+async function restoreDeletedWorkout(workout: DeletedWorkout) {
+  if (restoringWorkoutId.value != null) return
+  restoringWorkoutId.value = workout.id
+  try {
+    await api.post(`/api/workouts/${workout.id}/restore`)
+    await refreshDeletedWorkouts()
+    clearNuxtData('history')
+    clearNuxtData('active-workout')
+    clearNuxtData('competition')
+    clearNuxtData('personal-progress')
+    toast('Тренировка восстановлена', 'success')
+  } catch (error) {
+    toast((error as { statusMessage?: string }).statusMessage ?? 'Не удалось восстановить тренировку', 'error')
+    await refreshDeletedWorkouts()
+  } finally {
+    restoringWorkoutId.value = null
+  }
+}
 
 const inviting = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
@@ -180,6 +229,39 @@ async function removeFriend(id: number) {
       <p v-else class="friends-empty">
         Пока никого. Пригласи друга по ссылке — и сможете тренироваться вместе.
       </p>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <h2 class="block-title">Корзина</h2>
+        <span class="trash-retention">Хранение 7 дней</span>
+      </div>
+      <div v-if="deletedWorkouts?.length" class="trash-list glass">
+        <div v-for="workout in deletedWorkouts" :key="workout.id" class="trash-row">
+          <span class="trash-icon"><Icon name="lucide:trash-2" /></span>
+          <div class="trash-info">
+            <span class="trash-title">{{ workout.dayCode ?? 'Тренировка' }}</span>
+            <span class="trash-meta">{{ workoutDate(workout.date) }} · {{ workout.setCount }} подх.</span>
+            <span class="trash-expiry">Удалится через {{ daysUntilRemovalLabel(workout.expiresAt) }}</span>
+          </div>
+          <button
+            type="button"
+            class="restore-btn"
+            :disabled="restoringWorkoutId != null"
+            @click="restoreDeletedWorkout(workout)"
+          >
+            <Icon :name="restoringWorkoutId === workout.id ? 'lucide:loader-circle' : 'lucide:rotate-ccw'" :class="{ spinning: restoringWorkoutId === workout.id }" />
+            Восстановить
+          </button>
+        </div>
+      </div>
+      <div v-else class="row glass">
+        <div class="row-text">
+          <span class="row-title">Корзина пуста</span>
+          <span class="row-sub">Удалённые тренировки появятся здесь</span>
+        </div>
+        <Icon name="lucide:trash-2" class="empty-trash-icon" />
+      </div>
     </div>
 
     <div class="block">
@@ -397,6 +479,50 @@ async function removeFriend(id: number) {
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* Workout trash */
+.trash-retention { font-size: 12px; color: var(--muted); }
+.trash-list { display: flex; flex-direction: column; overflow: hidden; }
+.trash-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+
+  &:not(:last-child) { border-bottom: 1px solid var(--glass-edge-flat); }
+}
+.trash-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+.trash-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.trash-title { color: var(--text); font-size: 14px; font-weight: 700; }
+.trash-meta, .trash-expiry { color: var(--muted); font-size: 11px; }
+.trash-expiry { color: var(--accent); }
+.restore-btn {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:disabled { opacity: 0.55; cursor: wait; }
+}
+.empty-trash-icon { flex-shrink: 0; color: var(--muted); font-size: 20px; }
 
 /* Segmented theme control */
 .seg {
