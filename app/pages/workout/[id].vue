@@ -7,7 +7,9 @@ interface DayExercise {
   targetSets: number | null
   targetReps: string | null
   weightStep: number
+  isExtra?: boolean
 }
+interface ExerciseChoice { id: number; name: string }
 interface SetRow {
   id: number; userId: number; exerciseId: number; exerciseName: string
   setOrder: number; weight: number; reps: number; skipped: boolean
@@ -18,6 +20,7 @@ interface WorkoutData {
   workout: { id: number; date: string; dayId: number | null; startedAt: string; finishedAt: string | null; recordMode: 'each' | 'single' }
   members: MemberLite[]
   sets: SetRow[]
+  extraExercises: Array<{ id: number; name: string; order: number; weightStep: number }>
   exerciseDurations: Array<{
     userId: number; exerciseId: number; durationSeconds: number; startedAt: string; finishedAt: string
   }>
@@ -55,8 +58,64 @@ const { data: dayData } = await useAsyncData(
   { server: false, watch: [dayCode] },
 )
 
-const exercises = computed<DayExercise[]>(() => dayData.value?.exercises ?? [])
+const exercises = computed<DayExercise[]>(() => {
+  const planned = (dayData.value?.exercises ?? []).map(exercise => ({ ...exercise, isExtra: false }))
+  const plannedIds = new Set(planned.map(exercise => exercise.id))
+  const extra = (data.value?.extraExercises ?? [])
+    .filter(exercise => !plannedIds.has(exercise.id))
+    .map(exercise => ({
+      ...exercise,
+      order: planned.length + exercise.order,
+      targetSets: null,
+      targetReps: null,
+      isExtra: true,
+    }))
+  return [...planned, ...extra]
+})
 const dayTitle = computed(() => dayData.value?.day.code ?? 'Тренировка')
+
+const exercisePickerOpen = ref(false)
+const exercisePickerLoading = ref(false)
+const exercisePickerSearch = ref('')
+const exerciseBank = ref<ExerciseChoice[]>([])
+const addingExerciseId = ref<number | null>(null)
+const availableExercises = computed(() => {
+  const currentIds = new Set(exercises.value.map(exercise => exercise.id))
+  const query = exercisePickerSearch.value.trim().toLowerCase()
+  return exerciseBank.value.filter(exercise =>
+    !currentIds.has(exercise.id) && (!query || exercise.name.toLowerCase().includes(query)),
+  )
+})
+
+async function openExercisePicker() {
+  exercisePickerOpen.value = true
+  if (exerciseBank.value.length || exercisePickerLoading.value) return
+  exercisePickerLoading.value = true
+  try {
+    exerciseBank.value = await api.get<ExerciseChoice[]>('/api/exercises')
+  } catch {
+    toast('Не удалось загрузить упражнения.', 'error')
+  } finally {
+    exercisePickerLoading.value = false
+  }
+}
+
+async function addExerciseToWorkout(exercise: ExerciseChoice) {
+  if (addingExerciseId.value != null) return
+  addingExerciseId.value = exercise.id
+  try {
+    await api.post(`/api/workouts/${id}/exercises`, { exerciseId: exercise.id })
+    await refresh()
+    activeExerciseId.value = exercise.id
+    exercisePickerOpen.value = false
+    exercisePickerSearch.value = ''
+    toast(`${exercise.name} добавлено`, 'success')
+  } catch {
+    toast('Не удалось добавить упражнение.', 'error')
+  } finally {
+    addingExerciseId.value = null
+  }
+}
 
 // Whose set are we recording
 const selectedMemberId = ref<number | null>(null)
@@ -528,9 +587,9 @@ const completionPromptDismissed = ref(
 )
 const completionPromptOpen = ref(false)
 const allPlannedWorkComplete = computed(() => {
-  if (!exercises.value.length || !members.value.length) return false
-  return exercises.value.every((exercise) => {
-    if (targetCount(exercise) == null) return false
+  const planned = exercises.value.filter(exercise => !exercise.isExtra && targetCount(exercise) != null)
+  if (!planned.length || !members.value.length) return false
+  return planned.every((exercise) => {
     return members.value.every(member => isMemberComplete(exercise.id, member.id))
   })
 })
@@ -672,24 +731,35 @@ async function cancel() {
 
     <template v-if="exercises.length">
       <!-- Exercise switcher -->
-      <div ref="exStripEl" class="ex-strip">
+      <div class="ex-switcher">
+        <div ref="exStripEl" class="ex-strip">
+          <button
+            v-for="ex in exercises"
+            :key="ex.id"
+            type="button"
+            class="ex-pill"
+            :class="{ active: activeExerciseId === ex.id, complete: isComplete(ex.id) }"
+            @click="activeExerciseId = ex.id"
+          >
+            {{ ex.name }}
+            <span v-if="isComplete(ex.id)" class="ex-badge done"><Icon name="lucide:check" /></span>
+            <span v-else-if="doneCount(ex.id)" class="ex-badge">{{ doneCount(ex.id) }}</span>
+          </button>
+        </div>
         <button
-          v-for="ex in exercises"
-          :key="ex.id"
           type="button"
-          class="ex-pill"
-          :class="{ active: activeExerciseId === ex.id, complete: isComplete(ex.id) }"
-          @click="activeExerciseId = ex.id"
+          class="add-exercise-btn"
+          aria-label="Добавить упражнение"
+          @click="openExercisePicker"
         >
-          {{ ex.name }}
-          <span v-if="isComplete(ex.id)" class="ex-badge done"><Icon name="lucide:check" /></span>
-          <span v-else-if="doneCount(ex.id)" class="ex-badge">{{ doneCount(ex.id) }}</span>
+          <Icon name="lucide:plus" />
         </button>
       </div>
 
       <!-- Active exercise panel -->
       <div v-if="activeExercise" class="panel glass">
         <div class="panel-head">
+          <span v-if="activeExercise.isExtra" class="extra-kicker">Дополнительно</span>
           <h2 class="ex-name">{{ activeExercise.name }}</h2>
           <p v-if="activeExercise.targetReps" class="ex-target">
             Цель: {{ targetLabel(activeExercise) }}
@@ -789,7 +859,8 @@ async function cancel() {
     </template>
 
     <div v-else class="empty glass">
-      <p class="empty-text">У этой тренировки нет программы дня. Произвольные упражнения появятся позже.</p>
+      <p class="empty-text">У этой тренировки пока нет упражнений.</p>
+      <AppButton icon="lucide:plus" variant="ghost" @click="openExercisePicker">Добавить упражнение</AppButton>
     </div>
 
     <div class="actions">
@@ -803,6 +874,51 @@ async function cancel() {
       </template>
     </div>
   </section>
+
+  <Teleport to="body">
+    <Transition name="exercise-picker-modal">
+      <div v-if="exercisePickerOpen" class="exercise-picker-backdrop" @click.self="exercisePickerOpen = false">
+        <div class="exercise-picker glass" role="dialog" aria-modal="true" aria-labelledby="exercise-picker-title">
+          <div class="exercise-picker-head">
+            <div>
+              <span class="exercise-picker-kicker">Текущая тренировка</span>
+              <h2 id="exercise-picker-title" class="exercise-picker-title">Добавить упражнение</h2>
+            </div>
+            <button type="button" class="previous-close" aria-label="Закрыть" @click="exercisePickerOpen = false">
+              <Icon name="lucide:x" />
+            </button>
+          </div>
+
+          <label class="exercise-picker-search">
+            <Icon name="lucide:search" />
+            <input v-model="exercisePickerSearch" type="search" placeholder="Найти упражнение" autofocus />
+          </label>
+
+          <div class="exercise-picker-list">
+            <p v-if="exercisePickerLoading" class="exercise-picker-empty"><Icon name="lucide:loader-circle" /> Загружаю упражнения</p>
+            <template v-else>
+              <button
+                v-for="exercise in availableExercises"
+                :key="exercise.id"
+                type="button"
+                class="exercise-picker-row"
+                :disabled="addingExerciseId != null"
+                @click="addExerciseToWorkout(exercise)"
+              >
+                <span class="exercise-picker-icon"><Icon name="lucide:dumbbell" /></span>
+                <span>{{ exercise.name }}</span>
+                <Icon v-if="addingExerciseId === exercise.id" name="lucide:loader-circle" class="exercise-picker-spinner" />
+                <Icon v-else name="lucide:plus" class="exercise-picker-add" />
+              </button>
+            </template>
+            <p v-if="!exercisePickerLoading && !availableExercises.length" class="exercise-picker-empty">
+              {{ exercisePickerSearch ? 'Ничего не найдено' : 'Все упражнения уже добавлены' }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 
   <Teleport to="body">
     <Transition name="previous-modal">
@@ -969,13 +1085,37 @@ async function cancel() {
 }
 
 /* Exercise switcher */
+.ex-switcher {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
 .ex-strip {
+  flex: 1;
+  min-width: 0;
   display: flex;
   gap: var(--space-2);
   overflow-x: auto;
   padding-bottom: var(--space-1);
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
+}
+
+.add-exercise-btn {
+  width: 42px;
+  min-height: 40px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--glass-edge-flat));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  cursor: pointer;
+
+  &:active { transform: scale(0.96); }
 }
 
 .ex-pill {
@@ -1037,6 +1177,14 @@ async function cancel() {
 }
 
 .panel-head { display: flex; flex-direction: column; gap: 2px; }
+
+.extra-kicker {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 
 .ex-name {
   margin: 0;
@@ -1316,6 +1464,138 @@ async function cancel() {
 }
 
 .cta { width: 100%; margin-top: auto; display: flex; flex-direction: column; gap: var(--space-2); }
+
+.exercise-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  align-items: end;
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.exercise-picker {
+  width: 100%;
+  max-width: 480px;
+  max-height: min(82vh, 720px);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.exercise-picker-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.exercise-picker-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.exercise-picker-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--text);
+}
+
+.exercise-picker-search {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--glass-edge-flat);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+
+  input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: 15px;
+  }
+
+  &:focus-within { border-color: var(--accent); }
+}
+
+.exercise-picker-list {
+  min-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exercise-picker-row {
+  width: 100%;
+  min-height: 52px;
+  padding: 6px var(--space-3) 6px 6px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled { opacity: 0.6; cursor: wait; }
+}
+
+.exercise-picker-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+}
+
+.exercise-picker-add,
+.exercise-picker-spinner { margin-left: auto; flex-shrink: 0; color: var(--accent); font-size: 18px; }
+.exercise-picker-spinner { animation: previous-spin 0.8s linear infinite; }
+.exercise-picker-empty {
+  margin: 0;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.exercise-picker-modal-enter-active,
+.exercise-picker-modal-leave-active { transition: opacity 0.2s ease; }
+.exercise-picker-modal-enter-from,
+.exercise-picker-modal-leave-to { opacity: 0; }
+.exercise-picker-modal-enter-active .exercise-picker,
+.exercise-picker-modal-leave-active .exercise-picker { transition: transform 0.22s ease; }
+.exercise-picker-modal-enter-from .exercise-picker,
+.exercise-picker-modal-leave-to .exercise-picker { transform: translateY(100%); }
 
 .previous-backdrop {
   position: fixed;

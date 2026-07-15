@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { users } from '~~/server/db/schema'
+import { exercises, users } from '~~/server/db/schema'
 import {
   createWorkout, listWorkouts, getWorkout, addMember, respondToWorkoutInvite,
-  calculateExerciseDurations,
+  calculateExerciseDurations, addWorkoutExercise,
 } from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
@@ -61,6 +61,21 @@ describe('workouts', () => {
     expect(await listWorkouts(testDb, { memberId: egor })).toHaveLength(0)
     await respondToWorkoutInvite(testDb, id, egor, true)
     expect(await listWorkouts(testDb, { memberId: egor })).toHaveLength(1)
+  })
+
+  it('добавляет упражнение только в конкретную тренировку без дублей', async () => {
+    const { danil, dayId, benchId } = await seedBaseline()
+    const [squat] = await testDb.insert(exercises).values({ name: 'Приседания со штангой' }).returning({ id: exercises.id })
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+
+    expect(await addWorkoutExercise(testDb, id, benchId)).toBe('exists')
+    expect(await addWorkoutExercise(testDb, id, squat.id)).toBe('added')
+    expect(await addWorkoutExercise(testDb, id, squat.id)).toBe('exists')
+
+    const workout = await getWorkout(testDb, id)
+    expect(workout?.extraExercises).toEqual([
+      expect.objectContaining({ id: squat.id, name: 'Приседания со штангой', order: 1 }),
+    ])
   })
 
   it('считает интервалы упражнений отдельно для каждого участника', () => {

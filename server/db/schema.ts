@@ -111,6 +111,17 @@ export const workoutMembers = pgTable('workout_members', {
   pk: primaryKey({ columns: [t.workoutId, t.userId] }),
 }))
 
+// Упражнения, добавленные только в конкретную тренировку сверх программы дня.
+export const workoutExtraExercises = pgTable('workout_extra_exercises', {
+  workoutId: integer('workout_id').notNull().references(() => workouts.id, { onDelete: 'cascade' }),
+  exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
+  order: integer('order').notNull(),
+  addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.workoutId, t.exerciseId] }),
+  workoutOrderIdx: index('workout_extra_exercises_order_idx').on(t.workoutId, t.order),
+}))
+
 // При режиме «каждый сам» приглашённый подтверждает участие перед тем,
 // как тренировка становится для него активной.
 export const workoutInvites = pgTable('workout_invites', {

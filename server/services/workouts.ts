@@ -1,13 +1,47 @@
 import { and, desc, eq, gt, inArray, isNull, notExists, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
 import {
-  workouts, workoutMembers, workoutInvites, sets, users, exercises, programDays, exerciseVariations,
+  workouts, workoutMembers, workoutInvites, workoutExtraExercises, sets, users, exercises,
+  programDays, programExercises, exerciseVariations,
 } from '~~/server/db/schema'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
 
 export async function addMember(executor: Executor, workoutId: number, userId: number): Promise<void> {
   await executor.insert(workoutMembers).values({ workoutId, userId }).onConflictDoNothing()
+}
+
+export async function addWorkoutExercise(
+  executor: Executor,
+  workoutId: number,
+  exerciseId: number,
+): Promise<'added' | 'exists' | 'exercise-not-found'> {
+  const [exercise, planned] = await Promise.all([
+    executor
+      .select({ id: exercises.id })
+      .from(exercises)
+      .where(and(eq(exercises.id, exerciseId), eq(exercises.isArchived, false), isNull(exercises.aliasOf)))
+      .limit(1),
+    executor
+      .select({ id: programExercises.id })
+      .from(workouts)
+      .innerJoin(programExercises, eq(programExercises.dayId, workouts.dayId))
+      .where(and(eq(workouts.id, workoutId), eq(programExercises.exerciseId, exerciseId)))
+      .limit(1),
+  ])
+  if (!exercise.length) return 'exercise-not-found'
+  if (planned.length) return 'exists'
+
+  const [maxOrder] = await executor
+    .select({ value: sql<number>`coalesce(max(${workoutExtraExercises.order}), 0)`.mapWith(Number) })
+    .from(workoutExtraExercises)
+    .where(eq(workoutExtraExercises.workoutId, workoutId))
+  const inserted = await executor
+    .insert(workoutExtraExercises)
+    .values({ workoutId, exerciseId, order: (maxOrder?.value ?? 0) + 1 })
+    .onConflictDoNothing()
+    .returning({ exerciseId: workoutExtraExercises.exerciseId })
+  return inserted.length ? 'added' : 'exists'
 }
 
 export async function createWorkout(
@@ -291,7 +325,7 @@ export function calculateExerciseDurations(
 export async function getWorkout(executor: Executor, id: number) {
   const [w] = await executor.select().from(workouts).where(eq(workouts.id, id)).limit(1)
   if (!w) return null
-  const [members, rows] = await Promise.all([
+  const [members, rows, extraExercises] = await Promise.all([
     executor
       .select({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
       .from(workoutMembers)
@@ -319,6 +353,17 @@ export async function getWorkout(executor: Executor, id: number) {
       .leftJoin(exerciseVariations, eq(exerciseVariations.id, sets.variationId))
       .where(eq(sets.workoutId, id))
       .orderBy(sets.exerciseId, sets.setOrder),
+    executor
+      .select({
+        id: exercises.id,
+        name: exercises.name,
+        order: workoutExtraExercises.order,
+        weightStep: exercises.weightStep,
+      })
+      .from(workoutExtraExercises)
+      .innerJoin(exercises, eq(exercises.id, workoutExtraExercises.exerciseId))
+      .where(eq(workoutExtraExercises.workoutId, id))
+      .orderBy(workoutExtraExercises.order, workoutExtraExercises.addedAt),
   ])
   return {
     workout: {
@@ -331,6 +376,7 @@ export async function getWorkout(executor: Executor, id: number) {
     },
     members,
     sets: rows,
+    extraExercises,
     exerciseDurations: calculateExerciseDurations(rows, w.finishedAt),
   }
 }
