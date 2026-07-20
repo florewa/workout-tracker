@@ -10,6 +10,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     ...devices['iPhone 13'],
+    browserName: 'chromium',
   },
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1 --port 4173',
