@@ -13,10 +13,16 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['test/services/**/*.test.ts'],
-    setupFiles: ['./test/setup.test-db.ts'],
-    // Все сервис-тесты используют одну тестовую БД и делают TRUNCATE в beforeEach,
-    // поэтому файлы должны идти последовательно, иначе они затирают данные друг друга.
-    fileParallelism: false,
+    include: [
+      'test/*.test.ts',
+      'test/components/**/*.test.ts',
+      'test/stores/**/*.test.ts',
+    ],
+    // A few pure script tests import modules that also expose a DB-backed CLI.
+    // postgres-js connects lazily, so a placeholder prevents import-time config
+    // errors without opening a connection during unit tests.
+    env: {
+      DATABASE_URL: 'postgres://unused:unused@127.0.0.1:1/unused',
+    },
   },
 })
