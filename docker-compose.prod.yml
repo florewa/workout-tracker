@@ -47,6 +47,18 @@ services:
       - uploads:/app/uploads
     restart: unless-stopped
 
+  # Запускается хостовым cron раз в неделю: profile исключает его из обычного up.
+  backup:
+    build:
+      context: .
+      target: backup
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["maintenance"]
+    restart: "no"
+
 volumes:
   pgdata:
   uploads:

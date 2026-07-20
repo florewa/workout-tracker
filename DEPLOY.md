@@ -91,6 +91,40 @@ docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml down -v
 ```
 
+## Еженедельный бэкап БД в Telegram
+
+В `.env` заполнить `BACKUP_TELEGRAM_IDS` — Telegram-ID получателей через
+запятую. Каждый получатель должен предварительно открыть и запустить бота.
+
+Проверить ручной запуск:
+
+```bash
+docker compose -f docker-compose.prod.yml --profile maintenance run --rm backup
+```
+
+Команда создаёт полный plain-SQL дамп PostgreSQL, сжимает его в `.sql.gz`,
+отправляет документ текущим ботом и удаляет временный файл. Том `uploads` с
+аватарами и изображениями не включается.
+
+Для запуска каждое воскресенье в 04:00 открыть `crontab -e` на сервере и
+добавить, заменив путь к проекту:
+
+```cron
+0 4 * * 0 cd /home/USER/workout-tracker && docker compose -f docker-compose.prod.yml --profile maintenance run --rm backup >> backup-cron.log 2>&1
+```
+
+Восстановление на чистой БД:
+
+```bash
+gunzip -c workout-backup-YYYY-MM-DDTHH-MM-SSZ.sql.gz | \
+  docker compose -f docker-compose.prod.yml exec -T db \
+  sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+После восстановления перезапустить приложение. Пользователям при необходимости
+потребуется заново загрузить аватары, так как файлы изображений намеренно не
+входят в архив.
+
 ## Изоляция / безопасность
 - Всё в compose-проекте `workout-tracker`: свои контейнеры (`workout-tracker-*`), своя сеть, том `workout-tracker_pgdata`. `down` чужого не трогает.
 - Postgres доступен только внутри сети compose (порт не опубликован).
