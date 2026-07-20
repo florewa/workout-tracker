@@ -5,14 +5,12 @@ const emit = defineEmits<{ close: [] }>()
 
 <template>
   <Teleport to="body">
-    <Transition name="avatar-preview">
-      <div class="avatar-backdrop" role="dialog" aria-modal="true" :aria-label="`Аватар ${name}`" @click.self="emit('close')">
-        <button type="button" class="avatar-close" aria-label="Закрыть" @click="emit('close')"><Icon name="lucide:x" /></button>
-        <img v-if="src" :src="src" :alt="`Аватар ${name}`" class="avatar-image" />
-        <UserAvatar v-else :name="name" :size="240" />
-        <strong class="avatar-name">{{ name }}</strong>
-      </div>
-    </Transition>
+    <div class="avatar-backdrop" role="dialog" aria-modal="true" :aria-label="`Аватар ${name}`" @click.self="emit('close')">
+      <button type="button" class="avatar-close" aria-label="Закрыть" @click="emit('close')"><Icon name="lucide:x" /></button>
+      <img v-if="src" :src="src" :alt="`Аватар ${name}`" class="avatar-image" />
+      <UserAvatar v-else :name="name" :size="240" />
+      <strong class="avatar-name">{{ name }}</strong>
+    </div>
   </Teleport>
 </template>
 

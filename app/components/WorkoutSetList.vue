@@ -39,16 +39,20 @@ function onGripMove(e: PointerEvent) {
   if (dragIndex.value === null) return
   let delta = e.clientY - startY
   // Пересекли половину соседней строки — меняем местами и сдвигаем базу.
-  while (delta > rowH / 2 && dragIndex.value < items.value.length - 1) {
-    const i = dragIndex.value
-    ;[items.value[i], items.value[i + 1]] = [items.value[i + 1], items.value[i]]
+  while (delta > rowH / 2 && dragIndex.value !== null && dragIndex.value < items.value.length - 1) {
+    const i: number = dragIndex.value
+    const current = items.value[i]!
+    items.value[i] = items.value[i + 1]!
+    items.value[i + 1] = current
     dragIndex.value = i + 1
     startY += rowH
     delta -= rowH
   }
-  while (delta < -rowH / 2 && dragIndex.value > 0) {
-    const i = dragIndex.value
-    ;[items.value[i], items.value[i - 1]] = [items.value[i - 1], items.value[i]]
+  while (delta < -rowH / 2 && dragIndex.value !== null && dragIndex.value > 0) {
+    const i: number = dragIndex.value
+    const current = items.value[i]!
+    items.value[i] = items.value[i - 1]!
+    items.value[i - 1] = current
     dragIndex.value = i - 1
     startY -= rowH
     delta += rowH

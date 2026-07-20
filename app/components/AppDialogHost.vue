@@ -14,7 +14,7 @@ const toastIcon: Record<string, string> = {
     <div class="toasts">
       <TransitionGroup name="toast">
         <div v-for="t in toasts" :key="t.id" class="toast glass" :class="t.kind">
-          <Icon :name="toastIcon[t.kind]" class="toast-icon" />
+          <Icon :name="toastIcon[t.kind] ?? 'lucide:info'" class="toast-icon" />
           <span class="toast-text">{{ t.message }}</span>
         </div>
       </TransitionGroup>

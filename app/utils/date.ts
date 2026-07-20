@@ -13,7 +13,7 @@ const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 // Короткий день недели: Пн, Вт, …
 export function weekdayShort(d: Date | string): string {
   const date = typeof d === 'string' ? new Date(d) : d
-  return WEEKDAY_SHORT[date.getDay()]
+  return WEEKDAY_SHORT[date.getDay()] ?? ''
 }
 
 // Дата с префиксом дня недели: «Пн, 27 июня» (опционально с годом)

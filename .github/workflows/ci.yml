@@ -48,6 +48,12 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Apply test database migrations
         run: npm run db:migrate:test
 
@@ -56,3 +62,14 @@ jobs:
 
       - name: Build production bundle
         run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Seed browser smoke user
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "insert into users (id, name) values (999, 'E2E') on conflict (id) do update set name = excluded.name"
+
+      - name: Run mobile browser smoke tests
+        env:
+          AUTH_DEV_USER_ID: "999"
+        run: npm run test:e2e

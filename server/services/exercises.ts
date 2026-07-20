@@ -97,6 +97,7 @@ export async function createExercise(
     muscleGroup: input.muscleGroup?.trim() || null,
     weightStep: input.weightStep ?? 2.5,
   }).returning({ id: exercises.id })
+  if (!row) throw new Error('Упражнение не создано')
   return row
 }
 
