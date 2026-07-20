@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { testDb, resetDb } from '../helpers/db'
+import { testDb, resetDb, seedBaseline } from '../helpers/db'
 import { sets, users, workoutMembers, workouts } from '~~/server/db/schema'
 import { resolveUser, isAllowed, parseAllowlist, listUsers, getAvatar, setAvatar, deleteUserAccount } from '~~/server/services/users'
 import { createWorkout } from '~~/server/services/workouts'
