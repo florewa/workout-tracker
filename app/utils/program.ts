@@ -12,5 +12,5 @@ export function programPhoto(code: string): string | null {
 // Фокус дня из заголовка "ДЕНЬ 1 · ВЕРХ A (грудь, спина)" → "грудь, спина"
 export function dayFocus(title: string): string {
   const m = title.match(/\(([^)]+)\)/)
-  return m ? m[1].trim() : ''
+  return m?.[1]?.trim() ?? ''
 }

@@ -95,6 +95,9 @@ docker compose -f docker-compose.prod.yml down -v
 
 В `.env` заполнить `BACKUP_TELEGRAM_IDS` — Telegram-ID получателей через
 запятую. Каждый получатель должен предварительно открыть и запустить бота.
+Рекомендуется также создать пару ключей `age-keygen -o workout-backup-key.txt`,
+записать публичный ключ `age1...` в `BACKUP_AGE_RECIPIENT`, а файл с приватным
+ключом хранить вне сервера (например, в менеджере паролей и второй офлайн-копии).
 
 Проверить ручной запуск:
 
@@ -102,9 +105,11 @@ docker compose -f docker-compose.prod.yml down -v
 docker compose -f docker-compose.prod.yml --profile maintenance run --rm backup
 ```
 
-Команда создаёт полный plain-SQL дамп PostgreSQL, сжимает его в `.sql.gz`,
-отправляет документ текущим ботом и удаляет временный файл. Том `uploads` с
-аватарами и изображениями не включается.
+Команда создаёт полный custom-дамп PostgreSQL, разворачивает его во временную
+базу и выполняет smoke-проверку таблиц. Только после успешной проверки файл
+шифруется (если задан `BACKUP_AGE_RECIPIENT`), отправляется ботом и удаляется.
+При любой ошибке бот шлёт аварийное уведомление. Том `uploads` с аватарами и
+изображениями не включается.
 
 Для запуска каждое воскресенье в 04:00 открыть `crontab -e` на сервере и
 добавить, заменив путь к проекту:
@@ -113,17 +118,33 @@ docker compose -f docker-compose.prod.yml --profile maintenance run --rm backup
 0 4 * * 0 cd /home/USER/workout-tracker && docker compose -f docker-compose.prod.yml --profile maintenance run --rm backup >> backup-cron.log 2>&1
 ```
 
-Восстановление на чистой БД:
+Расшифровка (для файла `.age`) и восстановление на чистой БД:
 
 ```bash
-gunzip -c workout-backup-YYYY-MM-DDTHH-MM-SSZ.sql.gz | \
-  docker compose -f docker-compose.prod.yml exec -T db \
-  sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+age --decrypt -i workout-backup-key.txt \
+  -o workout-backup.dump workout-backup-YYYY-MM-DDTHH-MM-SSZ.dump.age
+docker compose -f docker-compose.prod.yml cp workout-backup.dump db:/tmp/workout-backup.dump
+docker compose -f docker-compose.prod.yml exec -T db \
+  sh -c 'pg_restore --exit-on-error --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB" /tmp/workout-backup.dump'
 ```
 
 После восстановления перезапустить приложение. Пользователям при необходимости
 потребуется заново загрузить аватары, так как файлы изображений намеренно не
 входят в архив.
+
+## Мониторинг доступности
+
+`GET /api/health` проверяет приложение и соединение с PostgreSQL; при проблеме
+возвращает HTTP 503. В `.env` задайте `HEALTHCHECK_URL` и
+`MONITOR_TELEGRAM_IDS`, затем добавьте проверку раз в пять минут:
+
+```cron
+*/5 * * * * cd /home/USER/workout-tracker && docker run --rm --env-file .env -v "$PWD/deploy:/deploy:ro" curlimages/curl:8.10.1 sh /deploy/check-health.sh >> health-cron.log 2>&1
+```
+
+Чтобы не получать сообщение каждые пять минут при длинной аварии, на сервере
+рекомендуется обернуть команду системным монитором с подавлением повторов
+(например, Uptime Kuma). Сам endpoint не раскрывает секреты и детали ошибки.
 
 ## Изоляция / безопасность
 - Всё в compose-проекте `workout-tracker`: свои контейнеры (`workout-tracker-*`), своя сеть, том `workout-tracker_pgdata`. `down` чужого не трогает.

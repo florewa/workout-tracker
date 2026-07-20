@@ -12,7 +12,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Нужен непустой список ids' })
   }
 
-  const own = await getSetOwnership(db, body.ids[0])
+  const firstId = body.ids[0]
+  if (firstId == null) throw createError({ statusCode: 400, statusMessage: 'Нужен непустой список ids' })
+  const own = await getSetOwnership(db, firstId)
   if (!own) throw createError({ statusCode: 404, statusMessage: 'Подход не найден' })
   if (!(await isWorkoutMember(db, own.workoutId, me.id))) {
     throw createError({ statusCode: 403, statusMessage: 'Нет доступа к тренировке' })

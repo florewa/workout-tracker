@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { testDb, resetDb } from '../helpers/db'
-import { users } from '~~/server/db/schema'
-import { resolveUser, isAllowed, parseAllowlist, listUsers, getAvatar, setAvatar } from '~~/server/services/users'
+import { testDb, resetDb, seedBaseline } from '../helpers/db'
+import { sets, users, workoutMembers, workouts } from '~~/server/db/schema'
+import { resolveUser, isAllowed, parseAllowlist, listUsers, getAvatar, setAvatar, deleteUserAccount } from '~~/server/services/users'
+import { createWorkout } from '~~/server/services/workouts'
+import { addSet } from '~~/server/services/sets'
 
 beforeEach(async () => { await resetDb() })
 
@@ -61,5 +63,28 @@ describe('allowlist', () => {
     expect(parseAllowlist('1, 2 ,42')).toEqual([1, 2, 42])
     expect(parseAllowlist('')).toEqual([])
     expect(parseAllowlist(undefined)).toEqual([])
+  })
+})
+
+describe('deleteUserAccount', () => {
+  it('удаляет личные подходы, но сохраняет общую тренировку и данные друга', async () => {
+    const { danil, egor, benchId } = await seedBaseline()
+    const { id: workoutId } = await createWorkout(testDb, { createdBy: danil, memberIds: [egor], recordMode: 'single' })
+    await addSet(testDb, { workoutId, userId: danil, exerciseId: benchId, weight: 60, reps: 8 })
+    await addSet(testDb, { workoutId, userId: egor, exerciseId: benchId, weight: 90, reps: 8 })
+
+    await deleteUserAccount(testDb, danil)
+
+    expect(await testDb.select().from(users).where(eq(users.id, danil))).toHaveLength(0)
+    expect(await testDb.select().from(workouts).where(eq(workouts.id, workoutId))).toHaveLength(1)
+    expect((await testDb.select().from(sets).where(eq(sets.workoutId, workoutId))).map(row => row.userId)).toEqual([egor])
+    expect((await testDb.select().from(workoutMembers).where(eq(workoutMembers.workoutId, workoutId))).map(row => row.userId)).toEqual([egor])
+  })
+
+  it('удаляет осиротевшую личную тренировку', async () => {
+    const { danil } = await seedBaseline()
+    const { id } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await deleteUserAccount(testDb, danil)
+    expect(await testDb.select().from(workouts).where(eq(workouts.id, id))).toHaveLength(0)
   })
 })

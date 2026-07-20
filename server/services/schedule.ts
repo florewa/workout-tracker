@@ -161,5 +161,6 @@ export async function resolveScheduleRange(executor: Executor, from: string, to:
 
 export async function getScheduledProgram(executor: Executor, date: string): Promise<DateScheduleSlot> {
   const [slot] = await resolveScheduleRange(executor, date, date)
+  if (!slot) throw new Error('Не удалось рассчитать расписание')
   return slot
 }

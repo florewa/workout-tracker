@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { exercises, exerciseVariations, sets, users, workouts } from '~~/server/db/schema'
+import { exercises, exerciseVariations, programExercises, sets, users, workouts } from '~~/server/db/schema'
 import {
   createWorkout, listWorkouts, getWorkout, addMember, respondToWorkoutInvite,
   calculateExerciseDurations, addWorkoutExercise, listDeletedWorkouts, purgeExpiredWorkouts,
@@ -16,6 +16,21 @@ describe('workouts', () => {
     const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
     const res = await getWorkout(testDb, id)
     expect(res!.members.map((m) => m.id)).toContain(danil)
+  })
+
+  it('фиксирует программу в тренировке и не меняет историю вместе с шаблоном', async () => {
+    const { danil, dayId, benchId } = await seedBaseline()
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+    const before = await getWorkout(testDb, id)
+
+    await testDb.update(programExercises)
+      .set({ targetSets: 99, targetReps: '1' })
+      .where(eq(programExercises.exerciseId, benchId))
+    const after = await getWorkout(testDb, id)
+
+    expect(before?.plannedExercises).toHaveLength(1)
+    expect(after?.plannedExercises).toEqual(before?.plannedExercises)
+    expect(after?.plannedExercises[0]).toMatchObject({ id: benchId, targetSets: 5, targetReps: '5,5,3,3,2' })
   })
 
   it('createWorkout добавляет указанных участников без дублей', async () => {

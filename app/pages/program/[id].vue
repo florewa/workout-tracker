@@ -113,7 +113,9 @@ async function move(index: number, dir: -1 | 1) {
   const next = index + dir
   if (next < 0 || next >= items.value.length || dayId.value == null) return
   const arr = items.value.map(i => i.peId)
-  ;[arr[index], arr[next]] = [arr[next], arr[index]]
+  const current = arr[index]!
+  arr[index] = arr[next]!
+  arr[next] = current
   try {
     await api.patch('/api/program/exercises/reorder', { dayId: dayId.value, ids: arr })
     await load()
@@ -261,9 +263,9 @@ async function addExercise(ex: BankItem) {
             <div class="base-list">
               <div v-for="m in circle" :key="m.id" class="base-row">
                 <span class="base-name">{{ m.name }}</span>
-                <input v-model="baseValues[m.id].weight" type="number" inputmode="decimal" min="0" step="2.5" class="t-input b-w" placeholder="кг" @change="saveBase(m.id)" />
+                <input v-model="baseValues[m.id]!.weight" type="number" inputmode="decimal" min="0" step="2.5" class="t-input b-w" placeholder="кг" @change="saveBase(m.id)" />
                 <span class="t-x">×</span>
-                <input v-model="baseValues[m.id].reps" type="number" inputmode="numeric" min="0" class="t-input b-r" placeholder="повт." @change="saveBase(m.id)" />
+                <input v-model="baseValues[m.id]!.reps" type="number" inputmode="numeric" min="0" class="t-input b-r" placeholder="повт." @change="saveBase(m.id)" />
               </div>
             </div>
           </div>

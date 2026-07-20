@@ -23,13 +23,14 @@ export async function getVariation(executor: Executor, id: number): Promise<{ ex
 
 export async function addVariation(executor: Executor, exerciseId: number, name: string, altExerciseId?: number | null): Promise<{ id: number }> {
   return executor.transaction(async (tx) => {
-    const [{ cnt }] = await tx
+    const [countRow] = await tx
       .select({ cnt: sql<number>`count(*)`.mapWith(Number) })
       .from(exerciseVariations)
       .where(eq(exerciseVariations.exerciseId, exerciseId))
     const [row] = await tx.insert(exerciseVariations)
-      .values({ exerciseId, name: name.trim(), altExerciseId: altExerciseId ?? null, isDefault: cnt === 0 }) // первая вариация — дефолтная
+      .values({ exerciseId, name: name.trim(), altExerciseId: altExerciseId ?? null, isDefault: (countRow?.cnt ?? 0) === 0 }) // первая вариация — дефолтная
       .returning({ id: exerciseVariations.id })
+    if (!row) throw new Error('Вариация не создана')
     return row
   })
 }

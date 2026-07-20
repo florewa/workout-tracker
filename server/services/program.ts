@@ -44,11 +44,12 @@ export async function getProgramDayById(executor: Executor, id: number) {
 }
 
 export async function createDay(executor: Executor, input: { code: string; title: string; weekday: number | null }): Promise<{ id: number }> {
-  const [{ maxOrder }] = await executor.select({ maxOrder: sql<number>`coalesce(max(${programDays.order}), 0)`.mapWith(Number) }).from(programDays)
+  const [orderRow] = await executor.select({ maxOrder: sql<number>`coalesce(max(${programDays.order}), 0)`.mapWith(Number) }).from(programDays)
   const code = input.code.trim()
   const [row] = await executor.insert(programDays)
-    .values({ code, title: input.title.trim() || code, order: maxOrder + 1, weekday: input.weekday })
+    .values({ code, title: input.title.trim() || code, order: (orderRow?.maxOrder ?? 0) + 1, weekday: input.weekday })
     .returning({ id: programDays.id })
+  if (!row) throw new Error('День программы не создан')
   return row
 }
 
@@ -74,13 +75,14 @@ export async function addExerciseToDay(
   dayId: number,
   input: { exerciseId: number; targetSets?: number | null; targetReps?: string | null },
 ): Promise<{ id: number }> {
-  const [{ maxOrder }] = await executor
+  const [orderRow] = await executor
     .select({ maxOrder: sql<number>`coalesce(max(${programExercises.order}), 0)`.mapWith(Number) })
     .from(programExercises)
     .where(eq(programExercises.dayId, dayId))
   const [row] = await executor.insert(programExercises)
-    .values({ dayId, exerciseId: input.exerciseId, order: maxOrder + 1, targetSets: input.targetSets ?? null, targetReps: input.targetReps ?? null })
+    .values({ dayId, exerciseId: input.exerciseId, order: (orderRow?.maxOrder ?? 0) + 1, targetSets: input.targetSets ?? null, targetReps: input.targetReps ?? null })
     .returning({ id: programExercises.id })
+  if (!row) throw new Error('Упражнение не добавлено в программу')
   return row
 }
 
@@ -102,7 +104,7 @@ export async function reorderProgramExercises(executor: Executor, dayId: number,
   if (orderedIds.length !== set.size || !orderedIds.every(id => set.has(id))) return false
   await executor.transaction(async (tx) => {
     for (let i = 0; i < orderedIds.length; i++) {
-      await tx.update(programExercises).set({ order: i + 1 }).where(and(eq(programExercises.id, orderedIds[i]), eq(programExercises.dayId, dayId)))
+      await tx.update(programExercises).set({ order: i + 1 }).where(and(eq(programExercises.id, orderedIds[i]!), eq(programExercises.dayId, dayId)))
     }
   })
   return true

@@ -7,7 +7,7 @@ export default defineNuxtConfig({
   typescript: { strict: true },
   // Живая синхронизация совместной тренировки между участниками
   nitro: { experimental: { websocket: true } },
-  modules: ['@pinia/nuxt', '@nuxt/icon'],
+  modules: ['@pinia/nuxt', '@nuxt/icon', '@nuxt/eslint'],
   icon: {
     clientBundle: { scan: true, includeCustomCollections: true },
   },

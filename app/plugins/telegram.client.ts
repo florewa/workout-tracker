@@ -1,8 +1,8 @@
 import { retrieveRawInitData, retrieveLaunchParams } from '@telegram-apps/sdk'
 
 export default defineNuxtPlugin(() => {
-  let initData = ''
-  let startParam = ''
+  let initData: string
+  let startParam: string
   try {
     initData = retrieveRawInitData() ?? ''
   } catch {

@@ -3,6 +3,19 @@
 Мобильное веб-приложение для ведения тренировок в Telegram Mini Apps. Проект
 работает на Nuxt 4, Vue 3, PostgreSQL и Drizzle ORM.
 
+## Архитектура
+
+Приложение является модульным монолитом: Vue-клиент обращается только к
+серверным маршрутам `/api/*`, которые выполняются в Nitro. Обращения к
+PostgreSQL находятся в `server/services` и `server/db`; подключение к базе и
+секреты не попадают в браузерный bundle. Для текущего масштаба проекта
+отдельный backend-сервис не требуется — Nitro здесь и является backend-слоем.
+
+Realtime-обновления тренировок пока хранят подключения WebSocket в памяти
+одного процесса. Перед горизонтальным масштабированием приложения потребуется
+общий брокер сообщений (например, Redis Pub/Sub), чтобы синхронизировать
+несколько экземпляров.
+
 ## Требования
 
 - Node.js 22
@@ -40,9 +53,11 @@
 
 ## Проверки
 
-Быстрые unit-тесты не требуют запущенной базы данных:
+Статические проверки и быстрые unit-тесты не требуют запущенной базы данных:
 
 ```bash
+npm run lint
+npm run typecheck
 npm run test:unit
 ```
 
@@ -54,11 +69,22 @@ npm run db:migrate:test
 npm run test:db
 ```
 
+Мобильные browser smoke-тесты запускают production-подобный dev-сервер и также
+используют PostgreSQL с пользователем из `AUTH_DEV_USER_ID`:
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
 Полная локальная проверка и production-сборка:
 
 ```bash
+npm run lint
+npm run typecheck
 npm test
 npm run build
+npm run test:e2e
 ```
 
 Та же последовательность автоматически выполняется для каждого pull request в

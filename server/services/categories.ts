@@ -13,6 +13,7 @@ export async function listCategories(executor: Executor): Promise<{ id: number; 
 
 export async function createCategory(executor: Executor, name: string): Promise<{ id: number }> {
   const [row] = await executor.insert(categories).values({ name }).returning({ id: categories.id })
+  if (!row) throw new Error('Категория не создана')
   return row
 }
 
@@ -23,11 +24,11 @@ export async function updateCategory(executor: Executor, id: number, name: strin
 // Удаляет только пустую категорию (без упражнений) — защищает встроенные.
 // Возвращает false, если в категории есть упражнения.
 export async function deleteCategory(executor: Executor, id: number): Promise<boolean> {
-  const [{ n }] = await executor
+  const [usage] = await executor
     .select({ n: sql<number>`count(*)`.mapWith(Number) })
     .from(exercises)
     .where(eq(exercises.categoryId, id))
-  if (n > 0) return false
+  if ((usage?.n ?? 0) > 0) return false
   await executor.delete(categories).where(eq(categories.id, id))
   return true
 }
