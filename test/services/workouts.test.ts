@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { exercises, sets, users, workouts } from '~~/server/db/schema'
+import { exercises, exerciseVariations, sets, users, workouts } from '~~/server/db/schema'
 import {
   createWorkout, listWorkouts, getWorkout, addMember, respondToWorkoutInvite,
   calculateExerciseDurations, addWorkoutExercise, listDeletedWorkouts, purgeExpiredWorkouts,
-  restoreWorkout, trashWorkout,
+  removeWorkoutExercise, restoreWorkout, trashWorkout,
 } from '~~/server/services/workouts'
 
 beforeEach(async () => { await resetDb() })
@@ -77,6 +77,49 @@ describe('workouts', () => {
     expect(workout?.extraExercises).toEqual([
       expect.objectContaining({ id: squat.id, name: 'Приседания со штангой', order: 1 }),
     ])
+  })
+
+  it('удаляет добавленное упражнение, пока нет подходов', async () => {
+    const { danil, dayId } = await seedBaseline()
+    const [squat] = await testDb.insert(exercises).values({ name: 'Приседания' }).returning({ id: exercises.id })
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+    await addWorkoutExercise(testDb, id, squat.id)
+
+    expect(await removeWorkoutExercise(testDb, id, squat.id)).toBe('removed')
+    expect((await getWorkout(testDb, id))?.extraExercises).toEqual([])
+    expect(await removeWorkoutExercise(testDb, id, squat.id)).toBe('not-found')
+  })
+
+  it('не удаляет добавленное упражнение с записанными подходами', async () => {
+    const { danil, dayId } = await seedBaseline()
+    const [squat] = await testDb.insert(exercises).values({ name: 'Приседания' }).returning({ id: exercises.id })
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+    await addWorkoutExercise(testDb, id, squat.id)
+    await testDb.insert(sets).values({
+      workoutId: id, userId: danil, exerciseId: squat.id, setOrder: 1, weight: 80, reps: 8,
+    })
+
+    expect(await removeWorkoutExercise(testDb, id, squat.id)).toBe('has-sets')
+    expect((await getWorkout(testDb, id))?.extraExercises).toHaveLength(1)
+  })
+
+  it('учитывает подходы через вариацию при удалении упражнения', async () => {
+    const { danil, dayId } = await seedBaseline()
+    const [base, alternative] = await testDb.insert(exercises).values([
+      { name: 'Махи гантелями в стороны' },
+      { name: 'Отведение рук в кроссовере' },
+    ]).returning({ id: exercises.id })
+    const [variation] = await testDb.insert(exerciseVariations).values({
+      exerciseId: base.id, altExerciseId: alternative.id, name: 'Кроссовер',
+    }).returning({ id: exerciseVariations.id })
+    const { id } = await createWorkout(testDb, { createdBy: danil, dayId, memberIds: [] })
+    await addWorkoutExercise(testDb, id, base.id)
+    await testDb.insert(sets).values({
+      workoutId: id, userId: danil, exerciseId: alternative.id, variationId: variation.id,
+      setOrder: 1, weight: 10, reps: 12,
+    })
+
+    expect(await removeWorkoutExercise(testDb, id, base.id)).toBe('has-sets')
   })
 
   it('перемещает тренировку в корзину и восстанавливает её', async () => {

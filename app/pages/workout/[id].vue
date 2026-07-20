@@ -33,6 +33,7 @@ const api = useApi()
 const session = useSessionStore()
 const { toast, confirm } = useDialog()
 const id = Number(route.params.id)
+const openedFromHistory = computed(() => route.query.from === 'history')
 const now = ref(Date.now())
 let timerInterval: ReturnType<typeof setInterval> | undefined
 
@@ -77,8 +78,12 @@ const dayTitle = computed(() => dayData.value?.day.code ?? 'Тренировка
 const exercisePickerOpen = ref(false)
 const exercisePickerLoading = ref(false)
 const exercisePickerSearch = ref('')
+const exercisePickerSearchInput = ref<HTMLInputElement | null>(null)
+const exercisePickerSearchFocused = ref(false)
 const exerciseBank = ref<ExerciseChoice[]>([])
 const addingExerciseId = ref<number | null>(null)
+const removingExerciseId = ref<number | null>(null)
+const exerciseInfoId = ref<number | null>(null)
 const availableExercises = computed(() => {
   const currentIds = new Set(exercises.value.map(exercise => exercise.id))
   const query = exercisePickerSearch.value.trim().toLowerCase()
@@ -114,6 +119,39 @@ async function addExerciseToWorkout(exercise: ExerciseChoice) {
     toast('Не удалось добавить упражнение.', 'error')
   } finally {
     addingExerciseId.value = null
+  }
+}
+
+function closeExercisePickerKeyboard() {
+  exercisePickerSearchInput.value?.blur()
+  exercisePickerSearchFocused.value = false
+}
+
+function closeExercisePicker() {
+  closeExercisePickerKeyboard()
+  exercisePickerOpen.value = false
+  exercisePickerSearch.value = ''
+}
+
+async function removeExtraExercise(exercise: DayExercise) {
+  if (!exercise.isExtra || removingExerciseId.value != null) return
+  const ok = await confirm({
+    title: 'Убрать упражнение?',
+    message: `${exercise.name} будет удалено только из этой тренировки.`,
+    confirmText: 'Убрать',
+    danger: true,
+  })
+  if (!ok) return
+  removingExerciseId.value = exercise.id
+  try {
+    await api.del(`/api/workouts/${id}/exercises/${exercise.id}`)
+    if (activeExerciseId.value === exercise.id) activeExerciseId.value = null
+    await refresh()
+    toast('Упражнение убрано', 'success')
+  } catch (error) {
+    toast((error as { statusMessage?: string }).statusMessage ?? 'Не удалось убрать упражнение', 'error')
+  } finally {
+    removingExerciseId.value = null
   }
 }
 
@@ -343,64 +381,67 @@ const previousOpen = ref(false)
 const previousLoading = ref(false)
 const previousWorkout = ref<PreviousExerciseWorkout | null>(null)
 const previousTitle = ref('')
-const previousMember = ref('')
+const previousMemberId = ref<number | null>(null)
+const previousMember = computed(() => members.value.find(member => member.id === previousMemberId.value)?.name ?? '')
 
-async function openPreviousWorkout() {
-  if (!activeExerciseId.value || !selectedMemberId.value || previousLoading.value) return
-  previousTitle.value = activeExercise.value?.name ?? 'Упражнение'
-  previousMember.value = selectedMemberName.value
+async function loadPreviousWorkout(memberId: number) {
+  if (!activeExerciseId.value || previousLoading.value) return
+  previousMemberId.value = memberId
   previousWorkout.value = null
-  previousOpen.value = true
   previousLoading.value = true
   try {
     previousWorkout.value = await api.get<PreviousExerciseWorkout | null>(
       `/api/exercises/${activeExerciseId.value}/previous`,
-      { userId: selectedMemberId.value, workoutId: id },
+      { userId: memberId, workoutId: id },
     )
   } catch {
     toast('Не удалось загрузить прошлую тренировку', 'error')
-    previousOpen.value = false
   } finally {
     previousLoading.value = false
   }
+}
+
+async function openPreviousWorkout() {
+  if (!activeExerciseId.value || !selectedMemberId.value || previousLoading.value) return
+  previousTitle.value = activeExercise.value?.name ?? 'Упражнение'
+  previousOpen.value = true
+  await loadPreviousWorkout(selectedMemberId.value)
 }
 
 function closePreviousWorkout() {
   previousOpen.value = false
 }
 
-watch(
-  [activeExerciseId, selectedMemberId],
-  async ([exId, memId]) => {
-    if (!exId || !memId) { prefill.value = null; return }
-    try {
-      prefill.value = await api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId, workoutId: id })
-    } catch {
-      prefill.value = null
-    }
-    if (prefill.value) { weight.value = prefill.value.weight; reps.value = prefill.value.reps }
-  },
-  { immediate: true },
-)
-
 // ── Вариации упражнения (снаряд) ──
 interface Variation { id: number; name: string; altExerciseId: number | null; isDefault: boolean }
 const variations = ref<Variation[]>([])
-const selectedVariationId = ref<number | null>(null)
+const variationSelections = reactive(new Map<string, number | null>())
+const variationSelectionKey = computed(() => `${selectedMemberId.value ?? 0}:${activeExerciseId.value ?? 0}`)
+const selectedVariationId = computed<number | null>({
+  get: () => variationSelections.get(variationSelectionKey.value) ?? null,
+  set: value => variationSelections.set(variationSelectionKey.value, value),
+})
 
-watch(activeExerciseId, async (exId) => {
-  if (!exId) { variations.value = []; return }
-  try { variations.value = await api.get<Variation[]>(`/api/exercises/${exId}/variations`) }
-  catch { variations.value = [] }
-}, { immediate: true })
-
-// выбор вариации: последняя у участника → дефолтная → первая
-watch([variations, prefill], () => {
-  if (!variations.value.length) { selectedVariationId.value = null; return }
-  const fromPrefill = prefill.value?.variationId
-  if (fromPrefill && variations.value.some(v => v.id === fromPrefill)) { selectedVariationId.value = fromPrefill; return }
-  selectedVariationId.value = (variations.value.find(v => v.isDefault) ?? variations.value[0]).id
-}, { immediate: true })
+watch(
+  [activeExerciseId, selectedMemberId],
+  async ([exId, memId]) => {
+    if (!exId || !memId) { prefill.value = null; variations.value = []; return }
+    const key = `${memId}:${exId}`
+    const [nextPrefill, nextVariations] = await Promise.all([
+      api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId, workoutId: id }).catch(() => null),
+      api.get<Variation[]>(`/api/exercises/${exId}/variations`).catch(() => []),
+    ])
+    if (activeExerciseId.value !== exId || selectedMemberId.value !== memId) return
+    prefill.value = nextPrefill
+    variations.value = nextVariations
+    if (nextPrefill) { weight.value = nextPrefill.weight; reps.value = nextPrefill.reps }
+    if (!variationSelections.has(key)) {
+      const previousVariation = nextPrefill?.variationId
+      variationSelections.set(key, previousVariation != null && nextVariations.some(item => item.id === previousVariation) ? previousVariation : null)
+    }
+  },
+  { immediate: true },
+)
 
 const activeWeightStep = computed(() => activeExercise.value?.weightStep ?? 2.5)
 function stepWeight(direction: -1 | 1) {
@@ -558,6 +599,7 @@ async function finish() {
 }
 
 function chooseAnother() { navigateTo({ path: '/select', query: { replaceWorkoutId: id } }) }
+function returnToHistory() { navigateTo('/history') }
 
 // Редактирование завершённой тренировки: временно возвращаем её в режим записи
 // (эндпоинты подходов проверяют только членство, не статус), правим, возвращаемся.
@@ -652,6 +694,9 @@ async function cancel() {
 <template>
   <!-- ── Summary ── -->
   <section v-if="finished" class="page summary">
+    <button v-if="openedFromHistory" type="button" class="summary-back" @click="returnToHistory">
+      <Icon name="lucide:arrow-left" /> История
+    </button>
     <div v-if="justFinished" class="summary-mark"><Icon name="lucide:check" /></div>
     <h1 class="screen-title">{{ justFinished ? 'Готово' : dayTitle }}</h1>
     <p class="summary-sub">{{ justFinished ? dayTitle : summaryDate }}</p>
@@ -761,8 +806,23 @@ async function cancel() {
       <!-- Active exercise panel -->
       <div v-if="activeExercise" class="panel glass">
         <div class="panel-head">
-          <span v-if="activeExercise.isExtra" class="extra-kicker">Дополнительно</span>
-          <h2 class="ex-name">{{ activeExercise.name }}</h2>
+          <div class="panel-title-row">
+            <div>
+              <span v-if="activeExercise.isExtra" class="extra-kicker">Дополнительно</span>
+              <h2 class="ex-name">{{ activeExercise.name }}</h2>
+            </div>
+            <div class="panel-tools">
+              <button type="button" class="panel-tool" aria-label="Информация об упражнении" @click="exerciseInfoId = activeExercise.id"><Icon name="lucide:info" /></button>
+              <button
+                v-if="activeExercise.isExtra"
+                type="button"
+                class="panel-tool danger"
+                :disabled="removingExerciseId === activeExercise.id"
+                aria-label="Убрать упражнение из тренировки"
+                @click="removeExtraExercise(activeExercise)"
+              ><Icon name="lucide:trash-2" /></button>
+            </div>
+          </div>
           <p v-if="activeExercise.targetReps" class="ex-target">
             Цель: {{ targetLabel(activeExercise) }}
           </p>
@@ -773,8 +833,11 @@ async function cancel() {
         </p>
 
         <div v-if="variations.length" class="variations">
-          <span class="variations-label">Вариация</span>
+          <span class="variations-label">Вариант для {{ selectedMemberName }}</span>
           <div class="variations-chips">
+            <button type="button" class="member-chip" :class="{ active: selectedVariationId === null }" @click="selectedVariationId = null">
+              Основное упражнение
+            </button>
             <button
               v-for="v in variations"
               :key="v.id"
@@ -871,7 +934,7 @@ async function cancel() {
       </template>
       <template v-else>
         <AppButton icon="lucide:check" variant="accent" :disabled="busy" @click="finish">Завершить</AppButton>
-        <AppButton icon="lucide:list" variant="ghost" :disabled="busy" @click="chooseAnother">Выбрать другую</AppButton>
+        <AppButton icon="lucide:replace" variant="ghost" :disabled="busy" @click="chooseAnother">Сменить программу тренировки</AppButton>
         <button v-if="!hasSets" type="button" class="cancel" :disabled="busy" @click="cancel">Отменить тренировку</button>
       </template>
     </div>
@@ -879,21 +942,32 @@ async function cancel() {
 
   <Teleport to="body">
     <Transition name="exercise-picker-modal">
-      <div v-if="exercisePickerOpen" class="exercise-picker-backdrop" @click.self="exercisePickerOpen = false">
+      <div v-if="exercisePickerOpen" class="exercise-picker-backdrop" @click.self="closeExercisePicker">
         <div class="exercise-picker glass" role="dialog" aria-modal="true" aria-labelledby="exercise-picker-title">
           <div class="exercise-picker-head">
             <div>
               <span class="exercise-picker-kicker">Текущая тренировка</span>
               <h2 id="exercise-picker-title" class="exercise-picker-title">Добавить упражнение</h2>
             </div>
-            <button type="button" class="previous-close" aria-label="Закрыть" @click="exercisePickerOpen = false">
+            <button type="button" class="previous-close" aria-label="Закрыть" @click="closeExercisePicker">
               <Icon name="lucide:x" />
             </button>
           </div>
 
           <label class="exercise-picker-search">
             <Icon name="lucide:search" />
-            <input v-model="exercisePickerSearch" type="search" placeholder="Найти упражнение" autofocus />
+            <input
+              ref="exercisePickerSearchInput"
+              v-model="exercisePickerSearch"
+              type="search"
+              enterkeyhint="search"
+              placeholder="Найти упражнение"
+              autofocus
+              @focus="exercisePickerSearchFocused = true"
+              @blur="exercisePickerSearchFocused = false"
+              @keydown.enter.prevent="closeExercisePickerKeyboard"
+            />
+            <button v-if="exercisePickerSearchFocused" type="button" class="exercise-picker-done" @pointerdown.prevent @click="closeExercisePickerKeyboard">Готово</button>
           </label>
 
           <div class="exercise-picker-list">
@@ -931,11 +1005,26 @@ async function cancel() {
               <span class="previous-kicker">Прошлая тренировка</span>
               <h2 id="previous-title" class="previous-title">{{ previousTitle }}</h2>
               <p v-if="previousWorkout" class="previous-meta">
-                {{ dateWithWeekday(previousWorkout.date, { year: true }) }}<template v-if="data && data.members.length > 1"> · {{ previousMember }}</template>
+                {{ dateWithWeekday(previousWorkout.date, { year: true }) }} · подходы {{ previousMember }}
               </p>
             </div>
             <button type="button" class="previous-close" aria-label="Закрыть" @click="closePreviousWorkout">
               <Icon name="lucide:x" />
+            </button>
+          </div>
+
+          <div v-if="multiMember" class="previous-members" aria-label="Участник прошлой тренировки">
+            <button
+              v-for="member in members"
+              :key="member.id"
+              type="button"
+              class="member-chip"
+              :class="{ active: previousMemberId === member.id }"
+              :disabled="previousLoading"
+              @click="loadPreviousWorkout(member.id)"
+            >
+              <UserAvatar :name="member.name" :src="member.avatarUrl" :size="22" />
+              {{ member.name }}
             </button>
           </div>
 
@@ -969,6 +1058,8 @@ async function cancel() {
       </div>
     </Transition>
   </Teleport>
+
+  <ExerciseInfoDialog :exercise-id="exerciseInfoId" @close="exerciseInfoId = null" />
 </template>
 
 <style scoped lang="scss">
@@ -987,6 +1078,19 @@ async function cancel() {
   font-size: clamp(22px, 6vw, 30px);
   line-height: 1.15;
   color: var(--text);
+}
+
+.summary-back {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .head {
@@ -1060,6 +1164,12 @@ async function cancel() {
   font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
 }
 .variations-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.panel-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.panel-tools { display: flex; gap: var(--space-1); flex-shrink: 0; }
+.panel-tool { width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--accent); display: grid; place-items: center; font-size: 18px; cursor: pointer; }
+.panel-tool.danger { color: #ff453a; }
+.panel-tool:disabled { opacity: .5; cursor: wait; }
 
 .member-chip {
   display: inline-flex;
@@ -1536,6 +1646,16 @@ async function cancel() {
   &:focus-within { border-color: var(--accent); }
 }
 
+.exercise-picker-done {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .exercise-picker-list {
   min-height: 120px;
   overflow-y: auto;
@@ -1630,6 +1750,7 @@ async function cancel() {
 }
 
 .previous-heading { min-width: 0; }
+.previous-members { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .previous-kicker {
   display: block;

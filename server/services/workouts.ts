@@ -44,6 +44,38 @@ export async function addWorkoutExercise(
   return inserted.length ? 'added' : 'exists'
 }
 
+export async function removeWorkoutExercise(
+  executor: Executor,
+  workoutId: number,
+  exerciseId: number,
+): Promise<'removed' | 'not-found' | 'has-sets'> {
+  const [extra] = await executor
+    .select({ exerciseId: workoutExtraExercises.exerciseId })
+    .from(workoutExtraExercises)
+    .where(and(
+      eq(workoutExtraExercises.workoutId, workoutId),
+      eq(workoutExtraExercises.exerciseId, exerciseId),
+    ))
+    .limit(1)
+  if (!extra) return 'not-found'
+
+  const [usage] = await executor
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(sets)
+    .leftJoin(exerciseVariations, eq(exerciseVariations.id, sets.variationId))
+    .where(and(
+      eq(sets.workoutId, workoutId),
+      sql`(${sets.exerciseId} = ${exerciseId} or ${exerciseVariations.exerciseId} = ${exerciseId})`,
+    ))
+  if ((usage?.count ?? 0) > 0) return 'has-sets'
+
+  await executor.delete(workoutExtraExercises).where(and(
+    eq(workoutExtraExercises.workoutId, workoutId),
+    eq(workoutExtraExercises.exerciseId, exerciseId),
+  ))
+  return 'removed'
+}
+
 export async function createWorkout(
   executor: Executor,
   input: { createdBy: number; dayId?: number | null; memberIds: number[]; date?: Date; recordMode?: 'each' | 'single' },

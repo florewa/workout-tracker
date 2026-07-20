@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { sets } from '~~/server/db/schema'
+import { programDays, programExercises, sets } from '~~/server/db/schema'
 import { createWorkout } from '~~/server/services/workouts'
 import {
   addSet, deleteSet, lastSet, getSetOwnership, updateSet, reorderSets, previousExerciseWorkout,
@@ -49,6 +49,44 @@ describe('sets', () => {
       [60, 8], [75, 3], [70, 4],
     ])
     expect(result?.bestSet).toMatchObject({ weight: 75, reps: 3 })
+  })
+
+  it('ищет историю упражнения во всех днях программы', async () => {
+    const { danil, benchId, dayId } = await seedBaseline()
+    const [secondDay] = await testDb.insert(programDays)
+      .values({ code: 'Верх B', title: 'ДЕНЬ 2 · ВЕРХ B', order: 2 })
+      .returning({ id: programDays.id })
+    await testDb.insert(programExercises).values({
+      dayId: secondDay.id, exerciseId: benchId, order: 1, targetSets: 3, targetReps: '8',
+    })
+    const { id: previousId } = await createWorkout(testDb, {
+      createdBy: danil, dayId, memberIds: [], date: new Date('2026-07-01T18:00:00Z'),
+    })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 70, reps: 8 })
+    const { id: currentId } = await createWorkout(testDb, {
+      createdBy: danil, dayId: secondDay.id, memberIds: [], date: new Date('2026-07-08T18:00:00Z'),
+    })
+
+    const result = await previousExerciseWorkout(testDb, danil, benchId, currentId)
+    expect(result?.workoutId).toBe(previousId)
+    expect(result?.sets.map(set => [set.weight, set.reps])).toEqual([[70, 8]])
+  })
+
+  it('не смешивает подходы участников в прошлой тренировке', async () => {
+    const { danil, egor, benchId } = await seedBaseline()
+    const { id: previousId } = await createWorkout(testDb, {
+      createdBy: danil, memberIds: [egor], date: new Date('2026-07-01T18:00:00Z'),
+    })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 70, reps: 12 })
+    await addSet(testDb, { workoutId: previousId, userId: egor, exerciseId: benchId, weight: 90, reps: 12 })
+    const { id: currentId } = await createWorkout(testDb, {
+      createdBy: danil, memberIds: [egor], date: new Date('2026-07-08T18:00:00Z'),
+    })
+
+    const danilHistory = await previousExerciseWorkout(testDb, danil, benchId, currentId)
+    const egorHistory = await previousExerciseWorkout(testDb, egor, benchId, currentId)
+    expect(danilHistory?.sets.map(set => set.weight)).toEqual([70])
+    expect(egorHistory?.sets.map(set => set.weight)).toEqual([90])
   })
 
   it('deleteSet удаляет подход', async () => {

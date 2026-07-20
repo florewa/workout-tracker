@@ -11,6 +11,8 @@ const initData = useState<string>('tgInitData', () => '')
 const { toast, confirm } = useDialog()
 
 const search = ref('')
+const searchInput = ref<HTMLInputElement | null>(null)
+const searchFocused = ref(false)
 const activeCategory = ref<number | null>(null)
 const activeMuscle = ref<string | null>(null)
 
@@ -39,6 +41,11 @@ const PAGE = 60
 const limit = ref(PAGE)
 watch([search, activeCategory, activeMuscle], () => { limit.value = PAGE })
 const visible = computed(() => filtered.value.slice(0, limit.value))
+
+function closeSearchKeyboard() {
+  searchInput.value?.blur()
+  searchFocused.value = false
+}
 
 // ── Детальная карточка ──
 interface ExerciseDetail {
@@ -291,7 +298,18 @@ async function deleteCategory(id: number) {
 
     <div class="search">
       <Icon name="lucide:search" class="search-icon" />
-      <input v-model="search" type="search" placeholder="Поиск упражнения" class="search-input" />
+      <input
+        ref="searchInput"
+        v-model="search"
+        type="search"
+        enterkeyhint="search"
+        placeholder="Поиск упражнения"
+        class="search-input"
+        @focus="searchFocused = true"
+        @blur="searchFocused = false"
+        @keydown.enter.prevent="closeSearchKeyboard"
+      />
+      <button v-if="searchFocused" type="button" class="search-done" @pointerdown.prevent @click="closeSearchKeyboard">Готово</button>
     </div>
 
     <!-- Управление категориями -->
@@ -575,13 +593,25 @@ async function deleteCategory(id: number) {
 .search-input {
   width: 100%;
   height: 44px;
-  padding: 0 var(--space-3) 0 calc(var(--space-3) + 26px);
+  padding: 0 72px 0 calc(var(--space-3) + 26px);
   border: 1px solid var(--glass-edge-flat);
   border-radius: var(--radius-md);
   background: var(--surface-2);
   color: var(--text);
   font-size: 15px;
   &:focus { outline: none; border-color: var(--accent); }
+}
+.search-done {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .cat-manage { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0; }

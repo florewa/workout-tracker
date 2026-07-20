@@ -31,6 +31,9 @@ export default defineEventHandler(async (event) => {
   let exerciseId = body.exerciseId
   if (variationId != null) {
     const v = await getVariation(db, variationId)
+    if (!v || v.exerciseId !== body.exerciseId) {
+      throw createError({ statusCode: 400, statusMessage: 'Вариация не относится к выбранному упражнению' })
+    }
     if (v?.altExerciseId) exerciseId = v.altExerciseId
   }
 
