@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { testDb, resetDb, seedBaseline } from '../helpers/db'
-import { programDays, programExercises, sets } from '~~/server/db/schema'
+import { exercises, programDays, programExercises, sets } from '~~/server/db/schema'
 import { createWorkout } from '~~/server/services/workouts'
 import {
   addSet, deleteSet, lastSet, getSetOwnership, updateSet, reorderSets, previousExerciseWorkout,
 } from '~~/server/services/sets'
 import { asc, eq } from 'drizzle-orm'
+import { addVariation } from '~~/server/services/variations'
 
 beforeEach(async () => { await resetDb() })
 
@@ -17,6 +18,19 @@ describe('sets', () => {
     const s2 = await addSet(testDb, { workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5 })
     expect(s1.setOrder).toBe(1)
     expect(s2.setOrder).toBe(2)
+  })
+
+  it('не дублирует подход при повторе офлайн-операции', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const { id: wId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    const input = {
+      workoutId: wId, userId: danil, exerciseId: benchId, weight: 60, reps: 5,
+      clientRequestId: 'offline-operation-0001',
+    }
+    const first = await addSet(testDb, input)
+    const repeated = await addSet(testDb, input)
+    expect(repeated).toEqual(first)
+    expect(await testDb.select().from(sets).where(eq(sets.workoutId, wId))).toHaveLength(1)
   })
 
   it('lastSet возвращает последний подход пользователя в упражнении', async () => {
@@ -87,6 +101,21 @@ describe('sets', () => {
     const egorHistory = await previousExerciseWorkout(testDb, egor, benchId, currentId)
     expect(danilHistory?.sets.map(set => set.weight)).toEqual([70])
     expect(egorHistory?.sets.map(set => set.weight)).toEqual([90])
+  })
+
+  it('не смешивает базовое упражнение и выбранную альтернативную вариацию', async () => {
+    const { danil, benchId } = await seedBaseline()
+    const [dumbbells] = await testDb.insert(exercises).values({ name: 'Жим гантелей лёжа' }).returning({ id: exercises.id })
+    const variation = await addVariation(testDb, benchId, 'Гантели', dumbbells.id)
+    const { id: previousId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: benchId, weight: 70, reps: 8 })
+    await addSet(testDb, { workoutId: previousId, userId: danil, exerciseId: dumbbells.id, variationId: variation.id, weight: 30, reps: 10 })
+    const { id: currentId } = await createWorkout(testDb, { createdBy: danil, memberIds: [] })
+
+    const base = await previousExerciseWorkout(testDb, danil, benchId, currentId, null)
+    const alternative = await previousExerciseWorkout(testDb, danil, benchId, currentId, variation.id)
+    expect(base?.sets.map(row => row.weight)).toEqual([70])
+    expect(alternative?.sets.map(row => row.weight)).toEqual([30])
   })
 
   it('deleteSet удаляет подход', async () => {

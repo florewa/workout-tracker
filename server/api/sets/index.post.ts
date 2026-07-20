@@ -8,11 +8,14 @@ import { broadcastSetsChanged } from '~~/server/utils/realtime'
 
 export default defineEventHandler(async (event) => {
   const me = await requireUser(event)
-  const body = await readBody<{ workoutId: number; userId: number; exerciseId: number; variationId?: number | null; weight?: number; reps?: number; skipped?: boolean; note?: string }>(event)
+  const body = await readBody<{ workoutId: number; userId: number; exerciseId: number; variationId?: number | null; weight?: number; reps?: number; skipped?: boolean; note?: string; clientRequestId?: string }>(event)
   for (const key of ['workoutId', 'userId', 'exerciseId'] as const) {
     if (typeof body?.[key] !== 'number') throw createError({ statusCode: 400, statusMessage: `Поле ${key} обязательно` })
   }
   const skipped = body.skipped === true
+  if (body.clientRequestId != null && !/^[a-zA-Z0-9_-]{8,64}$/.test(body.clientRequestId)) {
+    throw createError({ statusCode: 400, statusMessage: 'Неверный clientRequestId' })
+  }
   // У пропущенного подхода вес/повторы не обязательны — пишем нули
   if (!skipped) {
     for (const key of ['weight', 'reps'] as const) {
@@ -45,6 +48,8 @@ export default defineEventHandler(async (event) => {
     weight: skipped ? 0 : body.weight!,
     reps: skipped ? 0 : body.reps!,
     skipped,
+    note: body.note,
+    clientRequestId: body.clientRequestId ?? null,
   })
   broadcastSetsChanged(body.workoutId)
   return res

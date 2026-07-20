@@ -14,12 +14,20 @@ async function exerciseFamilyIds(executor: Executor, exerciseId: number): Promis
 
 export async function addSet(
   executor: Executor,
-  input: { workoutId: number; userId: number; exerciseId: number; variationId?: number | null; weight: number; reps: number; skipped?: boolean; note?: string | null },
+  input: { workoutId: number; userId: number; exerciseId: number; variationId?: number | null; weight: number; reps: number; skipped?: boolean; note?: string | null; clientRequestId?: string | null },
 ): Promise<{ id: number; setOrder: number }> {
+  if (input.clientRequestId) {
+    const [existing] = await executor
+      .select({ id: sets.id, setOrder: sets.setOrder })
+      .from(sets)
+      .where(and(eq(sets.userId, input.userId), eq(sets.clientRequestId, input.clientRequestId)))
+      .limit(1)
+    if (existing) return existing
+  }
   // Гонка двух параллельных записей могла бы выдать одинаковый set_order.
   // Защищает UNIQUE(workout_id, user_id, exercise_id, set_order) + retry с пересчётом.
   for (let attempt = 0; ; attempt++) {
-    const [{ maxOrder }] = await executor
+    const [orderRow] = await executor
       .select({ maxOrder: sql<number>`coalesce(max(${sets.setOrder}), 0)`.mapWith(Number) })
       .from(sets)
       .where(and(
@@ -27,7 +35,7 @@ export async function addSet(
         eq(sets.userId, input.userId),
         eq(sets.exerciseId, input.exerciseId),
       ))
-    const setOrder = maxOrder + 1
+    const setOrder = (orderRow?.maxOrder ?? 0) + 1
     try {
       const [row] = await executor.insert(sets).values({
         workoutId: input.workoutId,
@@ -39,10 +47,20 @@ export async function addSet(
         reps: input.reps,
         skipped: input.skipped ?? false,
         note: input.note ?? null,
+        clientRequestId: input.clientRequestId ?? null,
       }).returning({ id: sets.id })
+      if (!row) throw new Error('Подход не создан')
       return { id: row.id, setOrder }
     } catch (e) {
-      // 23505 — нарушение UNIQUE: порядок уже занят параллельной вставкой, пробуем снова
+      if ((e as { code?: string }).code === '23505' && input.clientRequestId) {
+        const [existing] = await executor
+          .select({ id: sets.id, setOrder: sets.setOrder })
+          .from(sets)
+          .where(and(eq(sets.userId, input.userId), eq(sets.clientRequestId, input.clientRequestId)))
+          .limit(1)
+        if (existing) return existing
+      }
+      // 23505 — порядок уже занят параллельной вставкой, пересчитываем.
       if ((e as { code?: string }).code === '23505' && attempt < 5) continue
       throw e
     }
@@ -89,22 +107,24 @@ export async function reorderSets(
     .where(inArray(sets.id, orderedIds))
   if (rows.length !== orderedIds.length) return null
 
-  const { workoutId, userId, exerciseId } = rows[0]
+  const first = rows[0]
+  if (!first) return null
+  const { workoutId, userId, exerciseId } = first
   if (rows.some(r => r.workoutId !== workoutId || r.userId !== userId || r.exerciseId !== exerciseId)) return null
 
-  const [{ total }] = await executor
+  const [totalRow] = await executor
     .select({ total: sql<number>`count(*)`.mapWith(Number) })
     .from(sets)
     .where(and(eq(sets.workoutId, workoutId), eq(sets.userId, userId), eq(sets.exerciseId, exerciseId)))
-  if (total !== orderedIds.length) return null
+  if ((totalRow?.total ?? 0) !== orderedIds.length) return null
 
   const TEMP = 100000
   await executor.transaction(async (tx) => {
     for (let i = 0; i < orderedIds.length; i++) {
-      await tx.update(sets).set({ setOrder: i + 1 + TEMP }).where(eq(sets.id, orderedIds[i]))
+      await tx.update(sets).set({ setOrder: i + 1 + TEMP }).where(eq(sets.id, orderedIds[i]!))
     }
     for (let i = 0; i < orderedIds.length; i++) {
-      await tx.update(sets).set({ setOrder: i + 1 }).where(eq(sets.id, orderedIds[i]))
+      await tx.update(sets).set({ setOrder: i + 1 }).where(eq(sets.id, orderedIds[i]!))
     }
   })
   return { workoutId }
@@ -114,7 +134,8 @@ export async function lastSet(
   executor: Executor,
   userId: number,
   exerciseId: number,
-): Promise<{ weight: number; reps: number } | null> {
+  variationId?: number | null,
+): Promise<{ weight: number; reps: number; variationId: number | null } | null> {
   // учитываем алиасы: подходы могли писаться под дубль, указывающий alias_of на этот канон
   const ids = await exerciseFamilyIds(executor, exerciseId)
   const [row] = await executor
@@ -123,7 +144,11 @@ export async function lastSet(
     .innerJoin(workouts, eq(workouts.id, sets.workoutId))
     .where(and(
       eq(sets.userId, userId),
-      inArray(sets.exerciseId, ids),
+      variationId === undefined
+        ? inArray(sets.exerciseId, ids)
+        : variationId === null
+          ? and(inArray(sets.exerciseId, ids), isNull(sets.variationId))
+          : eq(sets.variationId, variationId),
       eq(sets.skipped, false),
       isNull(workouts.deletedAt),
     ))
@@ -156,6 +181,7 @@ export async function previousExerciseWorkout(
   userId: number,
   exerciseId: number,
   excludeWorkoutId?: number,
+  variationId?: number | null,
 ): Promise<PreviousExerciseWorkout | null> {
   const ids = await exerciseFamilyIds(executor, exerciseId)
   const exerciseMatch = () => or(
@@ -163,11 +189,16 @@ export async function previousExerciseWorkout(
     inArray(exerciseVariations.exerciseId, ids),
   )
 
+  const selectedExerciseMatch = variationId === undefined
+    ? exerciseMatch()
+    : variationId === null
+      ? and(inArray(sets.exerciseId, ids), isNull(sets.variationId))
+      : eq(sets.variationId, variationId)
   const filters = [
     eq(sets.userId, userId),
     eq(sets.skipped, false),
     isNull(workouts.deletedAt),
-    exerciseMatch(),
+    selectedExerciseMatch,
   ]
   if (excludeWorkoutId != null) filters.push(ne(sets.workoutId, excludeWorkoutId))
 
@@ -196,7 +227,7 @@ export async function previousExerciseWorkout(
       eq(sets.workoutId, previous.workoutId),
       eq(sets.userId, userId),
       eq(sets.skipped, false),
-      exerciseMatch(),
+      selectedExerciseMatch,
     ))
     .orderBy(asc(sets.createdAt), asc(sets.id))
 

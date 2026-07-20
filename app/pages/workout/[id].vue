@@ -20,13 +20,13 @@ interface WorkoutData {
   workout: { id: number; date: string; dayId: number | null; startedAt: string; finishedAt: string | null; recordMode: 'each' | 'single' }
   members: MemberLite[]
   sets: SetRow[]
+  plannedExercises: Array<DayExercise & { tempo: string | null; restSec: number | null }>
   extraExercises: Array<{ id: number; name: string; order: number; weightStep: number }>
   exerciseDurations: Array<{
     userId: number; exerciseId: number; durationSeconds: number; startedAt: string; finishedAt: string
   }>
 }
 interface DayLite { id: number; code: string; title: string }
-interface DayDetail { day: { id: number; code: string; title: string }; exercises: DayExercise[] }
 
 const route = useRoute()
 const api = useApi()
@@ -42,6 +42,8 @@ const { data, refresh } = await useAsyncData(
   () => api.get<WorkoutData>(`/api/workouts/${id}`),
   { server: false },
 )
+const offlineQueue = useOfflineSetQueue(refresh)
+const pendingOfflineSets = offlineQueue.pendingForWorkout(id)
 
 const { data: daysList } = await useAsyncData(
   'program-days-lite',
@@ -53,14 +55,8 @@ const dayCode = computed(() =>
   daysList.value?.find(d => d.id === data.value?.workout.dayId)?.code ?? null,
 )
 
-const { data: dayData } = await useAsyncData(
-  'workout-day',
-  () => (dayCode.value ? api.get<DayDetail>(`/api/program/days/${encodeURIComponent(dayCode.value)}`) : Promise.resolve(null)),
-  { server: false, watch: [dayCode] },
-)
-
 const exercises = computed<DayExercise[]>(() => {
-  const planned = (dayData.value?.exercises ?? []).map(exercise => ({ ...exercise, isExtra: false }))
+  const planned = (data.value?.plannedExercises ?? []).map(exercise => ({ ...exercise, isExtra: false }))
   const plannedIds = new Set(planned.map(exercise => exercise.id))
   const extra = (data.value?.extraExercises ?? [])
     .filter(exercise => !plannedIds.has(exercise.id))
@@ -73,7 +69,7 @@ const exercises = computed<DayExercise[]>(() => {
     }))
   return [...planned, ...extra]
 })
-const dayTitle = computed(() => dayData.value?.day.code ?? 'Тренировка')
+const dayTitle = computed(() => dayCode.value ?? 'Тренировка')
 
 const exercisePickerOpen = ref(false)
 const exercisePickerLoading = ref(false)
@@ -162,7 +158,7 @@ watch(
   (m) => {
     if (m?.length && selectedMemberId.value == null) {
       const mine = session.currentUser?.id
-      selectedMemberId.value = mine && m.some(x => x.id === mine) ? mine : m[0].id
+      selectedMemberId.value = mine && m.some(x => x.id === mine) ? mine : m[0]!.id
     }
   },
   { immediate: true },
@@ -273,7 +269,7 @@ watch(
 
     let restoredId = latest && list.some(exercise => exercise.id === latest.slotExerciseId)
       ? latest.slotExerciseId
-      : list[0].id
+      : list[0]!.id
     if (latest && isComplete(restoredId)) {
       const index = list.findIndex(ex => ex.id === restoredId)
       restoredId = list.slice(index + 1).find(ex => !isComplete(ex.id))?.id
@@ -328,7 +324,7 @@ function nextIncompleteMember(exId: number, fromId: number | null): number | nul
   const start = ms.findIndex(m => m.id === fromId)
   for (let k = 1; k <= ms.length; k++) {
     const m = ms[(start + k) % ms.length]
-    if (!isMemberComplete(exId, m.id)) return m.id
+    if (m && !isMemberComplete(exId, m.id)) return m.id
   }
   return null
 }
@@ -392,7 +388,7 @@ async function loadPreviousWorkout(memberId: number) {
   try {
     previousWorkout.value = await api.get<PreviousExerciseWorkout | null>(
       `/api/exercises/${activeExerciseId.value}/previous`,
-      { userId: memberId, workoutId: id },
+      { userId: memberId, workoutId: id, variationId: selectedVariationId.value ?? 'base' },
     )
   } catch {
     toast('Не удалось загрузить прошлую тренировку', 'error')
@@ -428,7 +424,9 @@ watch(
     if (!exId || !memId) { prefill.value = null; variations.value = []; return }
     const key = `${memId}:${exId}`
     const [nextPrefill, nextVariations] = await Promise.all([
-      api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, { userId: memId, workoutId: id }).catch(() => null),
+      api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(`/api/exercises/${exId}/prefill`, {
+        userId: memId, workoutId: id, variationId: variationSelections.get(key) ?? 'base',
+      }).catch(() => null),
       api.get<Variation[]>(`/api/exercises/${exId}/variations`).catch(() => []),
     ])
     if (activeExerciseId.value !== exId || selectedMemberId.value !== memId) return
@@ -442,6 +440,19 @@ watch(
   },
   { immediate: true },
 )
+
+watch(selectedVariationId, async (variationId) => {
+  const exId = activeExerciseId.value
+  const memId = selectedMemberId.value
+  if (!exId || !memId) return
+  const nextPrefill = await api.get<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null>(
+    `/api/exercises/${exId}/prefill`,
+    { userId: memId, workoutId: id, variationId: variationId ?? 'base' },
+  ).catch(() => null)
+  if (activeExerciseId.value !== exId || selectedMemberId.value !== memId || selectedVariationId.value !== variationId) return
+  prefill.value = nextPrefill
+  if (nextPrefill) { weight.value = nextPrefill.weight; reps.value = nextPrefill.reps }
+})
 
 const activeWeightStep = computed(() => activeExercise.value?.weightStep ?? 2.5)
 function stepWeight(direction: -1 | 1) {
@@ -481,12 +492,13 @@ async function record() {
   const wasComplete = isMemberComplete(exId, selectedMemberId.value)
   busy.value = true
   try {
-    await api.post('/api/sets', {
+    const result = await offlineQueue.submit({
       workoutId: id, userId: selectedMemberId.value, exerciseId: exId,
       variationId: variations.value.length ? selectedVariationId.value : null,
       weight: weight.value, reps: reps.value,
     })
-    await refresh()
+    if (result.queued) toast('Нет сети: подход сохранён на устройстве и отправится автоматически.', 'success')
+    else await refresh()
     if (!wasComplete) advance(exId)
   } catch {
     toast('Не удалось записать подход.', 'error')
@@ -500,12 +512,13 @@ async function skip() {
   const exId = activeExerciseId.value
   busy.value = true
   try {
-    await api.post('/api/sets', {
+    const result = await offlineQueue.submit({
       workoutId: id, userId: selectedMemberId.value, exerciseId: exId,
       variationId: variations.value.length ? selectedVariationId.value : null,
       skipped: true,
     })
-    await refresh()
+    if (result.queued) toast('Нет сети: пропуск сохранён на устройстве.', 'success')
+    else await refresh()
     advance(exId)
   } catch {
     toast('Не удалось пропустить подход.', 'error')
@@ -775,6 +788,10 @@ async function cancel() {
         </div>
       </div>
     </header>
+    <button v-if="pendingOfflineSets" type="button" class="offline-banner" @click="offlineQueue.flush">
+      <Icon name="lucide:cloud-upload" />
+      {{ pendingOfflineSets }} {{ pendingOfflineSets === 1 ? 'запись ждёт' : 'записи ждут' }} отправки
+    </button>
 
     <template v-if="exercises.length">
       <!-- Exercise switcher -->
@@ -1129,6 +1146,22 @@ async function cancel() {
   font-size: 13px;
   font-weight: 600;
   color: var(--accent);
+}
+
+.offline-banner {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, #ffd23f 45%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, #ffd23f 10%, var(--surface));
+  color: #ffd23f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 /* Member chips */

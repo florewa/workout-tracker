@@ -148,6 +148,13 @@
       "when": 1784146097608,
       "tag": "0020_cold_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784575782502,
+      "tag": "0021_mixed_shiver_man",
+      "breakpoints": true
     }
   ]
 }

@@ -112,6 +112,23 @@ export const workoutMembers = pgTable('workout_members', {
   pk: primaryKey({ columns: [t.workoutId, t.userId] }),
 }))
 
+// Снимок программы на момент выбора дня. Историческая тренировка не должна
+// меняться, если позднее отредактировали шаблон программы или упражнение.
+export const workoutPlanExercises = pgTable('workout_plan_exercises', {
+  workoutId: integer('workout_id').notNull().references(() => workouts.id, { onDelete: 'cascade' }),
+  exerciseId: integer('exercise_id').notNull().references(() => exercises.id),
+  exerciseName: varchar('exercise_name', { length: 200 }).notNull(),
+  order: integer('order').notNull(),
+  targetSets: integer('target_sets'),
+  targetReps: varchar('target_reps', { length: 40 }),
+  tempo: varchar('tempo', { length: 20 }),
+  restSec: integer('rest_sec'),
+  weightStep: real('weight_step').notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.workoutId, t.exerciseId] }),
+  workoutOrderIdx: index('workout_plan_exercises_order_idx').on(t.workoutId, t.order),
+}))
+
 // Упражнения, добавленные только в конкретную тренировку сверх программы дня.
 export const workoutExtraExercises = pgTable('workout_extra_exercises', {
   workoutId: integer('workout_id').notNull().references(() => workouts.id, { onDelete: 'cascade' }),
@@ -168,8 +185,11 @@ export const sets = pgTable('sets', {
   // Пропущенный подход: занимает позицию в ротации, но не идёт в статистику
   skipped: boolean('skipped').notNull().default(false),
   note: text('note'),
+  // Ключ операции клиента делает повтор POST безопасным при восстановлении сети.
+  clientRequestId: varchar('client_request_id', { length: 64 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userExerciseIdx: index('sets_user_exercise_idx').on(t.userId, t.exerciseId, t.createdAt),
   orderUnique: uniqueIndex('sets_order_unique').on(t.workoutId, t.userId, t.exerciseId, t.setOrder),
+  clientRequestUnique: uniqueIndex('sets_client_request_unique').on(t.userId, t.clientRequestId),
 }))

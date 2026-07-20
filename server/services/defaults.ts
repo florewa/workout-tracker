@@ -33,11 +33,12 @@ export async function prefillValue(
   userId: number,
   exerciseId: number,
   excludeWorkoutId?: number,
+  variationId?: number | null,
 ): Promise<{ weight: number; reps: number; variationId: number | null; source: 'last' | 'default' } | null> {
   const previous = excludeWorkoutId == null
     ? null
-    : await previousExerciseWorkout(executor, userId, exerciseId, excludeWorkoutId)
-  const last = previous?.bestSet ?? (excludeWorkoutId == null ? await lastSet(executor, userId, exerciseId) : null)
+    : await previousExerciseWorkout(executor, userId, exerciseId, excludeWorkoutId, variationId)
+  const last = previous?.bestSet ?? (excludeWorkoutId == null ? await lastSet(executor, userId, exerciseId, variationId) : null)
   if (last) return { weight: last.weight, reps: last.reps, variationId: last.variationId, source: 'last' }
   const def = await getDefault(executor, userId, exerciseId)
   if (def) return { weight: def.weight, reps: def.reps, variationId: null, source: 'default' }
