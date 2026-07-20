@@ -1,6 +1,9 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, or, sql } from 'drizzle-orm'
 import type { db as dbType } from '~~/server/db/client'
-import { users } from '~~/server/db/schema'
+import {
+  exerciseDefaults, favoriteExercises, friendships, sets, users, workoutExtraExercises,
+  workoutInvites, workoutMembers, workouts,
+} from '~~/server/db/schema'
 import type { TelegramUser } from '~~/server/utils/telegram'
 
 type Executor = typeof dbType | Parameters<Parameters<typeof dbType.transaction>[0]>[0]
@@ -28,22 +31,25 @@ export async function resolveUser(
 ): Promise<{ id: number; name: string; avatarUrl: string | null }> {
   // 1. уже связан по telegram_id
   const byTg = await executor.select().from(users).where(eq(users.telegramId, tg.id)).limit(1)
-  if (byTg.length) return { id: byTg[0].id, name: byTg[0].name, avatarUrl: byTg[0].avatarUrl }
+  const existing = byTg[0]
+  if (existing) return { id: existing.id, name: existing.name, avatarUrl: existing.avatarUrl }
 
   // 2. seed-юзер с тем же именем и без telegram_id — линкуем
   const byName = await executor.select().from(users)
     .where(and(eq(users.name, tg.firstName), isNull(users.telegramId))).limit(1)
-  if (byName.length) {
+  const seedUser = byName[0]
+  if (seedUser) {
     await executor.update(users)
       .set({ telegramId: tg.id, username: tg.username })
-      .where(eq(users.id, byName[0].id))
-    return { id: byName[0].id, name: byName[0].name, avatarUrl: byName[0].avatarUrl }
+      .where(eq(users.id, seedUser.id))
+    return { id: seedUser.id, name: seedUser.name, avatarUrl: seedUser.avatarUrl }
   }
 
   // 3. новый
   const [created] = await executor.insert(users)
     .values({ name: tg.firstName, telegramId: tg.id, username: tg.username })
     .returning({ id: users.id, name: users.name, avatarUrl: users.avatarUrl })
+  if (!created) throw new Error('Пользователь не создан')
   return created
 }
 
@@ -54,4 +60,31 @@ export async function getAvatar(executor: Executor, userId: number): Promise<str
 
 export async function setAvatar(executor: Executor, userId: number, avatarUrl: string | null): Promise<void> {
   await executor.update(users).set({ avatarUrl }).where(eq(users.id, userId))
+}
+
+export async function deleteUserAccount(executor: Executor, userId: number): Promise<void> {
+  await executor.transaction(async (tx) => {
+    const memberships = await tx.select({ workoutId: workoutMembers.workoutId })
+      .from(workoutMembers).where(eq(workoutMembers.userId, userId))
+
+    await tx.delete(friendships).where(or(eq(friendships.userLow, userId), eq(friendships.userHigh, userId)))
+    await tx.delete(favoriteExercises).where(eq(favoriteExercises.userId, userId))
+    await tx.delete(exerciseDefaults).where(eq(exerciseDefaults.userId, userId))
+    await tx.delete(workoutInvites).where(eq(workoutInvites.userId, userId))
+    await tx.delete(sets).where(eq(sets.userId, userId))
+    await tx.delete(workoutMembers).where(eq(workoutMembers.userId, userId))
+    await tx.update(workouts).set({ createdBy: null }).where(eq(workouts.createdBy, userId))
+
+    // Личные тренировки без оставшихся участников больше никому не принадлежат.
+    for (const { workoutId } of memberships) {
+      const [memberCount] = await tx.select({ count: sql<number>`count(*)`.mapWith(Number) })
+        .from(workoutMembers).where(eq(workoutMembers.workoutId, workoutId))
+      if ((memberCount?.count ?? 0) > 0) continue
+      await tx.delete(sets).where(eq(sets.workoutId, workoutId))
+      await tx.delete(workoutInvites).where(eq(workoutInvites.workoutId, workoutId))
+      await tx.delete(workoutExtraExercises).where(eq(workoutExtraExercises.workoutId, workoutId))
+      await tx.delete(workouts).where(eq(workouts.id, workoutId))
+    }
+    await tx.delete(users).where(eq(users.id, userId))
+  })
 }

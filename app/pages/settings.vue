@@ -15,6 +15,8 @@ const api = useApi()
 const { toast, confirm } = useDialog()
 const initData = useState<string>('tgInitData', () => '')
 const previewFriend = ref<UserLite | null>(null)
+const exportingData = ref(false)
+const deletingAccount = ref(false)
 
 const themeOptions = [
   { value: 'system', label: 'Система', icon: 'lucide:monitor' },
@@ -183,6 +185,56 @@ async function removeFriend(id: number) {
     toast('Не удалось удалить', 'error')
   }
 }
+
+async function exportMyData() {
+  if (exportingData.value) return
+  exportingData.value = true
+  try {
+    const blob = await $fetch<Blob>('/api/me/export', {
+      responseType: 'blob',
+      headers: initData.value ? { Authorization: `tma ${initData.value}` } : {},
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `workout-data-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast('Архив данных подготовлен', 'success')
+  } catch {
+    toast('Не удалось выгрузить данные', 'error')
+  } finally {
+    exportingData.value = false
+  }
+}
+
+async function deleteAccount() {
+  if (deletingAccount.value) return
+  const accepted = await confirm({
+    title: 'Удалить аккаунт и данные?',
+    message: 'Будут безвозвратно удалены твои подходы, настройки и связи с друзьями. Сначала рекомендуем скачать данные.',
+    confirmText: 'Продолжить',
+    cancelText: 'Отмена',
+    danger: true,
+  })
+  if (!accepted) return
+  const confirmation = window.prompt('Для окончательного подтверждения введи УДАЛИТЬ')
+  if (confirmation !== 'УДАЛИТЬ') {
+    if (confirmation != null) toast('Удаление отменено: подтверждение не совпало', 'error')
+    return
+  }
+  deletingAccount.value = true
+  try {
+    await api.del('/api/me', { confirmation })
+    localStorage.clear()
+    const telegram = (window as unknown as { Telegram?: { WebApp?: { close?: () => void } } }).Telegram?.WebApp
+    if (telegram?.close) telegram.close()
+    else await navigateTo('/start')
+  } catch (error) {
+    toast((error as { statusMessage?: string }).statusMessage ?? 'Не удалось удалить аккаунт', 'error')
+    deletingAccount.value = false
+  }
+}
 </script>
 
 <template>
@@ -283,6 +335,20 @@ async function removeFriend(id: number) {
           @click="toggleReminders"
         >
           <span class="knob" />
+        </button>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2 class="block-title">Мои данные</h2>
+      <div class="data-actions glass">
+        <button type="button" class="data-action" :disabled="exportingData" @click="exportMyData">
+          <Icon name="lucide:download" />
+          <span><b>Скачать данные</b><small>Тренировки и настройки в JSON</small></span>
+        </button>
+        <button type="button" class="data-action danger" :disabled="deletingAccount" @click="deleteAccount">
+          <Icon name="lucide:user-round-x" />
+          <span><b>Удалить аккаунт</b><small>Безвозвратно удалить личные данные</small></span>
         </button>
       </div>
     </div>
@@ -416,6 +482,28 @@ async function removeFriend(id: number) {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.data-actions { display: flex; flex-direction: column; overflow: hidden; }
+.data-action {
+  min-height: 58px;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: left;
+  cursor: pointer;
+  &:not(:last-child) { border-bottom: 1px solid var(--glass-edge-flat); }
+  &:disabled { opacity: .55; cursor: wait; }
+  > svg { flex-shrink: 0; color: var(--accent); font-size: 20px; }
+  > span { display: flex; flex-direction: column; gap: 2px; }
+  b { font-size: 14px; }
+  small { color: var(--muted); font-size: 11px; }
+  &.danger { color: var(--accent); }
+  &.danger > svg { color: var(--accent); }
 }
 
 /* Friends */
