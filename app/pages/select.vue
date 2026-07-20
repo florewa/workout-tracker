@@ -127,6 +127,10 @@ function openWorkout(id: number) {
   navigateTo('/workout/' + id)
 }
 
+function returnToWorkout() {
+  if (replaceWorkoutId.value != null) navigateTo(`/workout/${replaceWorkoutId.value}`)
+}
+
 function openBank() { navigateTo('/exercises') }
 function openSchedule() { navigateTo('/schedule') }
 function openNewProgram() { navigateTo('/program/new') }
@@ -138,11 +142,14 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
     <div class="top">
     <!-- Header -->
     <div class="header">
+      <button v-if="replaceWorkoutId" type="button" class="header-back" aria-label="Вернуться в тренировку" @click="returnToWorkout">
+        <Icon name="lucide:arrow-left" />
+      </button>
       <div class="header-text">
-        <h1 class="h1 page-title">Выбор тренировки</h1>
-        <p class="subtitle">{{ replaceWorkoutId ? 'Выбери программу вместо текущей' : selectedDate === todayIso ? 'Выбери программу на сегодня' : headerDate }}</p>
+        <h1 class="h1 page-title">{{ replaceWorkoutId ? 'Смена программы' : 'Выбор тренировки' }}</h1>
+        <p class="subtitle">{{ replaceWorkoutId ? 'Выбери программу для текущей тренировки' : selectedDate === todayIso ? 'Выбери программу на сегодня' : headerDate }}</p>
       </div>
-      <div class="header-date" aria-label="Текущая дата">
+      <div v-if="!replaceWorkoutId" class="header-date" aria-label="Текущая дата">
         <Icon name="lucide:calendar" class="calendar-icon" />
         <span class="date-label">{{ headerDate }}</span>
       </div>
@@ -158,7 +165,7 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
 
     <div class="scroll">
     <!-- Банк упражнений — крупный вход -->
-    <button type="button" class="bank-entry" @click="openBank">
+    <button v-if="!replaceWorkoutId" type="button" class="bank-entry" @click="openBank">
       <span class="bank-icon" aria-hidden="true"><Icon name="lucide:library-big" /></span>
       <span class="bank-text">
         <span class="bank-title">Банк упражнений</span>
@@ -167,7 +174,7 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
       <Icon name="lucide:arrow-right" class="bank-chevron" aria-hidden="true" />
     </button>
 
-    <button type="button" class="schedule-entry glass" @click="openSchedule">
+    <button v-if="!replaceWorkoutId" type="button" class="schedule-entry glass" @click="openSchedule">
       <span class="schedule-icon" aria-hidden="true"><Icon name="lucide:calendar-range" /></span>
       <span class="schedule-text">
         <span class="schedule-title">Расписание</span>
@@ -275,9 +282,24 @@ function editProgram(id: number) { navigateTo('/program/' + id) }
 }
 
 .header-text {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.header-back {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  cursor: pointer;
 }
 
 .page-title {

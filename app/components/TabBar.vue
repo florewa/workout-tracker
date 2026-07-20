@@ -7,6 +7,8 @@ const tabs = [
   { to: '/settings', label: 'Профиль', icon: 'lucide:user' },
 ]
 function isActive(t: { to: string; match?: string[] }): boolean {
+  const openedFromHistory = route.path.startsWith('/workout/') && route.query?.from === 'history'
+  if (openedFromHistory) return t.to === '/history'
   const paths = t.match ?? [t.to]
   return paths.some((p) =>
     p === '/' ? route.path === '/' : route.path === p || route.path.startsWith(p + '/'),

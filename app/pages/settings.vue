@@ -14,6 +14,7 @@ const session = useSessionStore()
 const api = useApi()
 const { toast, confirm } = useDialog()
 const initData = useState<string>('tgInitData', () => '')
+const previewFriend = ref<UserLite | null>(null)
 
 const themeOptions = [
   { value: 'system', label: 'Система', icon: 'lucide:monitor' },
@@ -219,7 +220,9 @@ async function removeFriend(id: number) {
       </div>
       <div v-if="friends && friends.length" class="friends glass">
         <div v-for="f in friends" :key="f.id" class="friend-row">
-          <UserAvatar :name="f.name" :src="f.avatarUrl" :size="38" />
+          <button type="button" class="friend-avatar" :aria-label="`Открыть аватар ${f.name}`" @click="previewFriend = f">
+            <UserAvatar :name="f.name" :src="f.avatarUrl" :size="38" />
+          </button>
           <span class="friend-name">{{ f.name }}</span>
           <button type="button" class="friend-del" @click="removeFriend(f.id)">
             <Icon name="lucide:x" />
@@ -301,6 +304,7 @@ async function removeFriend(id: number) {
       </div>
     </div>
   </section>
+  <AvatarPreviewDialog v-if="previewFriend" :name="previewFriend.name" :src="previewFriend.avatarUrl" @close="previewFriend = null" />
 </template>
 
 <style scoped lang="scss">
@@ -450,6 +454,7 @@ async function removeFriend(id: number) {
 
   &:not(:last-child) { border-bottom: 1px solid var(--glass-edge-flat); }
 }
+.friend-avatar { flex-shrink: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: zoom-in; }
 
 .friend-name {
   flex: 1;
