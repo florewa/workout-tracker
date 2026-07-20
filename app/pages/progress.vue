@@ -1,20 +1,29 @@
 <script setup lang="ts">
 type PeriodKey = '1m' | '3m' | '6m' | '1y' | 'all'
+type ViewMode = 'personal' | 'friends'
 
 interface Series { userId: number; baseline: number; points: { date: string; e1rm: number }[] }
-interface BoardRow { userId: number; startE1rm: number; currentE1rm: number; deltaKg: number; deltaPct: number }
+interface BoardRow {
+  userId: number
+  startE1rm: number
+  currentE1rm: number
+  deltaKg: number
+  deltaPct: number
+  observations: number
+  eligible: boolean
+}
 interface CompetitionPayload {
   period: { key: PeriodKey; label: string; start: string }
   participants: { id: number; name: string; avatarUrl: string | null }[]
   exercises: { exerciseId: number; name: string }[]
   byExercise: Record<number, { series: Series[]; leaderboard: BoardRow[] }>
   rankings: {
-    growth: { userId: number; deltaPct: number }[]
+    growth: { userId: number; scorePct: number; exerciseCount: number }[]
     consistency: { userId: number; sessions: number }[]
     records: { userId: number; count: number }[]
-    heaviest: { userId: number; e1rm: number; exerciseName: string }[]
-    tonnage: { userId: number; value: number }[]
   }
+  sharedExerciseIds: number[]
+  minimumObservations: number
 }
 interface PersonalProgress {
   exerciseId: number
@@ -23,6 +32,12 @@ interface PersonalProgress {
   best: number
   sessions: number
   isFavorite: boolean
+}
+interface RankingTile {
+  key: string
+  icon: string
+  title: string
+  rows: { userId: number; val: string; sub?: string }[]
 }
 
 const api = useApi()
@@ -35,7 +50,7 @@ const PERIODS: { key: PeriodKey; short: string }[] = [
 const PALETTE = ['#ff7a1a', '#34c759', '#3b9dff', '#c86bff', '#ffd23f', '#ff5d8f']
 
 const period = ref<PeriodKey>('3m')
-const sortBy = ref<'pct' | 'kg'>('pct')
+const view = ref<ViewMode>('personal')
 const infoOpen = ref(false)
 
 const { data, pending } = await useAsyncData(
@@ -49,30 +64,69 @@ const { data: personalProgress, refresh: refreshPersonalProgress } = await useAs
   { server: false },
 )
 
-const exercises = computed(() => data.value?.exercises ?? [])
+function periodStart(key: PeriodKey): Date {
+  if (key === 'all') return new Date(0)
+  const date = new Date()
+  if (key === '1m') date.setMonth(date.getMonth() - 1)
+  if (key === '3m') date.setMonth(date.getMonth() - 3)
+  if (key === '6m') date.setMonth(date.getMonth() - 6)
+  if (key === '1y') date.setFullYear(date.getFullYear() - 1)
+  return date
+}
+function average(values: number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+function round1(value: number): number { return Math.round(value * 10) / 10 }
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle]! : average([sorted[middle - 1]!, sorted[middle]!])
+}
+
+const exercises = computed(() => {
+  const list = [...(data.value?.exercises ?? [])]
+  return list.sort((a, b) => {
+    const aShared = data.value?.sharedExerciseIds.includes(a.exerciseId) ? 1 : 0
+    const bShared = data.value?.sharedExerciseIds.includes(b.exerciseId) ? 1 : 0
+    return bShared - aShared || a.name.localeCompare(b.name, 'ru')
+  })
+})
 const selectedExerciseId = ref<number | null>(null)
 watch(
   exercises,
   (list) => {
     if (!list.length) { selectedExerciseId.value = null; return }
-    if (!list.some(e => e.exerciseId === selectedExerciseId.value)) selectedExerciseId.value = list[0].exerciseId
+    if (!list.some(e => e.exerciseId === selectedExerciseId.value)) selectedExerciseId.value = list[0]!.exerciseId
   },
   { immediate: true },
 )
 const selectedExercise = computed(() => exercises.value.find(ex => ex.exerciseId === selectedExerciseId.value) ?? null)
-const favoriteProgress = computed(() => (personalProgress.value ?? []).filter(ex => ex.isFavorite))
 const selectedIsFavorite = computed(() =>
   (personalProgress.value ?? []).some(ex => ex.exerciseId === selectedExerciseId.value && ex.isFavorite),
 )
 const favoriteSaving = ref(false)
 
-function personalSummary(exercise: PersonalProgress) {
-  const first = exercise.points[0]?.e1rm ?? 0
-  const current = exercise.points.at(-1)?.e1rm ?? 0
-  const delta = Math.round((current - first) * 10) / 10
-  const deltaPct = first > 0 ? Math.round((delta / first) * 1000) / 10 : 0
-  return { current, delta, deltaPct }
-}
+const personalCards = computed(() => (personalProgress.value ?? []).map((exercise) => {
+  const points = exercise.points.filter(point => new Date(point.date) >= periodStart(period.value))
+  const eligible = points.length >= (data.value?.minimumObservations ?? 4)
+  const start = points.length ? round1(average(points.slice(0, eligible ? 2 : 1).map(point => point.e1rm))) : 0
+  const current = points.length ? round1(average(points.slice(eligible ? -2 : -1).map(point => point.e1rm))) : 0
+  const delta = round1(current - start)
+  return {
+    ...exercise, points, start, current, delta, eligible,
+    best: points.length ? Math.max(...points.map(point => point.e1rm)) : 0,
+    deltaPct: start > 0 ? round1((delta / start) * 100) : 0,
+  }
+}).filter(exercise => exercise.points.length).sort((a, b) =>
+  Number(b.isFavorite) - Number(a.isFavorite) || b.points.length - a.points.length || a.name.localeCompare(b.name, 'ru'),
+))
+const personalEligible = computed(() => personalCards.value.filter(exercise => exercise.eligible))
+const personalScore = computed(() => personalEligible.value.length
+  ? round1(median(personalEligible.value.map(exercise => exercise.deltaPct)))
+  : null)
+const personalSessions = computed(() => new Set(
+  personalCards.value.flatMap(exercise => exercise.points.map(point => point.date.slice(0, 10))),
+).size)
 
 async function toggleSelectedFavorite() {
   const exercise = selectedExercise.value
@@ -94,7 +148,7 @@ function pName(id: number): string {
 }
 function pColor(id: number): string {
   const idx = data.value?.participants.findIndex(p => p.id === id) ?? 0
-  return PALETTE[(idx < 0 ? 0 : idx) % PALETTE.length]
+  return PALETTE[(idx < 0 ? 0 : idx) % PALETTE.length] ?? PALETTE[0]!
 }
 
 const block = computed(() =>
@@ -103,7 +157,7 @@ const block = computed(() =>
 
 const board = computed<BoardRow[]>(() => {
   const arr = [...(block.value?.leaderboard ?? [])]
-  arr.sort((a, b) => (sortBy.value === 'kg' ? b.deltaKg - a.deltaKg : b.deltaPct - a.deltaPct))
+  arr.sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.deltaPct - a.deltaPct)
   return arr
 })
 
@@ -111,8 +165,10 @@ const board = computed<BoardRow[]>(() => {
 const race = computed(() => {
   const b = block.value
   if (!b || !b.series.length || !data.value) return null
-  const startT = Date.parse(data.value.period.start)
-  let xMin = startT
+  const periodT = Date.parse(data.value.period.start)
+  const observedFirst = Math.min(...b.series.flatMap(series => series.points.map(point => Date.parse(point.date))))
+  const startT = data.value.period.key === 'all' ? observedFirst : periodT
+  const xMin = startT
   let xMax = startT
   const lines = b.series.map((s) => {
     const pts = [{ t: startT, pct: 100 }]
@@ -144,16 +200,14 @@ const race = computed(() => {
   return { polylines, baseY }
 })
 
-const tiles = computed(() => {
+const tiles = computed<RankingTile[]>(() => {
   const r = data.value?.rankings
   if (!r) return []
   const fmtPct = (v: number) => `${v > 0 ? '+' : ''}${v}%`
   return [
-    { key: 'growth', icon: 'lucide:trophy', title: 'Главный рост', rows: r.growth.map(x => ({ userId: x.userId, val: fmtPct(x.deltaPct) })) },
+    { key: 'growth', icon: 'lucide:trophy', title: 'Рост на общих упражнениях', rows: r.growth.map(x => ({ userId: x.userId, val: fmtPct(x.scorePct), sub: `${x.exerciseCount} упр.` })) },
     { key: 'records', icon: 'lucide:medal', title: 'Рекордсмен', rows: r.records.map(x => ({ userId: x.userId, val: `${x.count} PR` })) },
     { key: 'consistency', icon: 'lucide:target', title: 'Стабильность', rows: r.consistency.map(x => ({ userId: x.userId, val: `${x.sessions} трен.` })) },
-    { key: 'heaviest', icon: 'lucide:dumbbell', title: 'Тяжеловес', rows: r.heaviest.map(x => ({ userId: x.userId, val: `${x.e1rm} кг`, sub: x.exerciseName })) },
-    { key: 'tonnage', icon: 'lucide:package', title: 'Тоннаж', rows: r.tonnage.map(x => ({ userId: x.userId, val: `${Math.round(x.value)} кг` })) },
   ].filter(t => t.rows.length)
 })
 
@@ -165,12 +219,17 @@ const medals = ['🥇', '🥈', '🥉']
   <section class="page">
     <header class="head">
       <div class="head-row">
-        <h1 class="screen-title">Соревнование</h1>
+        <h1 class="screen-title">Прогресс</h1>
         <button type="button" class="info-btn" aria-label="Пояснения" @click="infoOpen = true">
           <Icon name="lucide:info" />
         </button>
       </div>
-      <p class="subtitle">Кто быстрее растёт — у каждого свой старт</p>
+      <p class="subtitle">{{ view === 'personal' ? 'Твоя динамика относительно собственного старта' : 'Сравниваем рост, а не абсолютные веса' }}</p>
+
+      <div class="seg view-seg">
+        <button type="button" class="seg-btn" :class="{ active: view === 'personal' }" @click="view = 'personal'">Мой рост</button>
+        <button type="button" class="seg-btn" :class="{ active: view === 'friends' }" @click="view = 'friends'">С друзьями</button>
+      </div>
 
       <div class="seg">
         <button
@@ -187,39 +246,60 @@ const medals = ['🥇', '🥈', '🥉']
     </header>
 
     <div class="scroll">
-      <section v-if="favoriteProgress.length" class="favorite-progress">
+      <template v-if="view === 'personal'">
+        <section class="personal-hero glass">
+          <div class="hero-score">
+            <span class="hero-label">Индекс роста</span>
+            <strong v-if="personalScore != null" :class="{ positive: personalScore > 0, negative: personalScore < 0 }">
+              {{ personalScore > 0 ? '+' : '' }}{{ personalScore }}%
+            </strong>
+            <strong v-else>—</strong>
+          </div>
+          <div class="hero-facts">
+            <span><b>{{ personalEligible.length }}</b> упражнений в расчёте</span>
+            <span><b>{{ personalSessions }}</b> тренировочных дней</span>
+          </div>
+          <p>Медиана роста по упражнениям с минимум {{ data?.minimumObservations ?? 4 }} замерами.</p>
+        </section>
+
+        <section v-if="personalCards.length" class="favorite-progress">
         <div class="section-head">
           <div>
-            <h2 class="section-title"><Icon name="lucide:star" /> Мой избранный прогресс</h2>
-            <p class="section-note">Личные показатели за всё время</p>
+            <h2 class="section-title"><Icon name="lucide:chart-no-axes-combined" /> По упражнениям</h2>
+            <p class="section-note">Избранные упражнения показаны первыми</p>
           </div>
         </div>
-        <div class="favorite-cards">
-          <article v-for="exercise in favoriteProgress" :key="exercise.exerciseId" class="favorite-card glass">
+        <div class="personal-list">
+          <article v-for="exercise in personalCards" :key="exercise.exerciseId" class="favorite-card glass">
             <div class="favorite-card-head">
               <span class="favorite-name">{{ exercise.name }}</span>
-              <Icon name="lucide:star" class="favorite-star" />
+              <Icon v-if="exercise.isFavorite" name="lucide:star" class="favorite-star" />
             </div>
-            <template v-if="exercise.sessions">
-              <div class="favorite-metrics">
-                <div><span>Лучший e1RM</span><b>{{ exercise.best }} кг</b></div>
-                <div><span>Сейчас</span><b>{{ personalSummary(exercise).current }} кг</b></div>
+              <div class="favorite-metrics four">
+                <div><span>Старт</span><b>{{ exercise.start }} кг</b></div>
+                <div><span>Сейчас</span><b>{{ exercise.current }} кг</b></div>
+                <div><span>Лучший</span><b>{{ exercise.best }} кг</b></div>
                 <div>
                   <span>Рост</span>
-                  <b :class="{ positive: personalSummary(exercise).delta > 0, negative: personalSummary(exercise).delta < 0 }">
-                    {{ personalSummary(exercise).delta > 0 ? '+' : '' }}{{ personalSummary(exercise).delta }} кг
-                    <small>({{ personalSummary(exercise).deltaPct > 0 ? '+' : '' }}{{ personalSummary(exercise).deltaPct }}%)</small>
+                  <b :class="{ positive: exercise.delta > 0, negative: exercise.delta < 0 }">
+                    {{ exercise.deltaPct > 0 ? '+' : '' }}{{ exercise.deltaPct }}%
+                    <small>{{ exercise.delta > 0 ? '+' : '' }}{{ exercise.delta }} кг</small>
                   </b>
                 </div>
               </div>
-              <span class="favorite-sessions">{{ exercise.sessions }} тренировок</span>
-            </template>
-            <p v-else class="favorite-empty">Пока нет записанных подходов</p>
+              <span class="favorite-sessions">
+                {{ exercise.points.length }} замеров · {{ exercise.eligible ? 'участвует в индексе' : `нужно ещё ${(data?.minimumObservations ?? 4) - exercise.points.length}` }}
+              </span>
           </article>
         </div>
-      </section>
+        </section>
+        <div v-else-if="!pending" class="empty glass">
+          <Icon name="lucide:chart-no-axes-combined" class="empty-icon" />
+          <p class="empty-text">Запиши несколько тренировок — здесь появится твоя динамика.</p>
+        </div>
+      </template>
 
-      <template v-if="hasData">
+      <template v-else-if="hasData">
         <!-- Селектор упражнения -->
         <div class="ex-strip">
           <button
@@ -272,10 +352,7 @@ const medals = ['🥇', '🥈', '🥉']
         <div class="card glass">
           <div class="card-head">
             <span class="card-title">Рост в этом упражнении</span>
-            <div class="sort">
-              <button type="button" :class="{ active: sortBy === 'pct' }" @click="sortBy = 'pct'">%</button>
-              <button type="button" :class="{ active: sortBy === 'kg' }" @click="sortBy = 'kg'">кг</button>
-            </div>
+            <span class="card-note">по % от своего старта</span>
           </div>
           <div v-if="board.length" class="board">
             <div v-for="(row, i) in board" :key="row.userId" class="board-row">
@@ -287,6 +364,7 @@ const medals = ['🥇', '🥈', '🥉']
                 {{ row.deltaKg > 0 ? '+' : '' }}{{ row.deltaKg }} кг
                 <em>{{ row.deltaPct > 0 ? '+' : '' }}{{ row.deltaPct }}%</em>
               </span>
+              <span v-if="!row.eligible" class="not-ready">{{ row.observations }}/{{ data?.minimumObservations }}</span>
             </div>
           </div>
           <p v-else class="card-empty">Нет данных за период</p>
@@ -311,9 +389,9 @@ const medals = ['🥇', '🥈', '🥉']
         </div>
       </template>
 
-      <div v-else-if="!pending" class="empty glass">
+      <div v-else-if="!pending && view === 'friends'" class="empty glass">
         <Icon name="lucide:trophy" class="empty-icon" aria-hidden="true" />
-        <p class="empty-text">Запишите тренировки — здесь появится соревнование по росту в кругу друзей</p>
+        <p class="empty-text">Запишите минимум {{ data?.minimumObservations ?? 4 }} тренировок в общих упражнениях — здесь появится честное сравнение роста.</p>
       </div>
     </div>
 
@@ -344,10 +422,10 @@ const medals = ['🥇', '🥈', '🥉']
                 </p>
               </div>
               <div class="term">
-                <span class="term-name">Δкг / Δ%</span>
+                <span class="term-name">Честный общий счёт</span>
                 <p class="term-desc">
-                  Насколько вырос e1RM за выбранный период — в килограммах и в процентах от старта.
-                  Переключатель «% / кг» меняет сортировку лидерборда.
+                  Нужно минимум <b>{{ data?.minimumObservations ?? 4 }} замера</b>. Старт и финиш — среднее двух замеров,
+                  а итог — медиана процентов роста только по общим упражнениям. Абсолютные килограммы на место не влияют.
                 </p>
               </div>
             </div>
@@ -429,6 +507,29 @@ const medals = ['🥇', '🥈', '🥉']
   gap: var(--space-3);
 }
 
+.personal-hero {
+  padding: var(--space-4);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  .hero-score { display: flex; flex-direction: column; gap: 2px; }
+  .hero-label { font-size: 11px; color: var(--muted); }
+  strong { font-family: var(--font-display); font-size: 28px; color: var(--text); }
+  strong.positive { color: var(--pr); }
+  strong.negative { color: var(--accent); }
+  p { grid-column: 1 / -1; margin: 0; font-size: 11px; line-height: 1.45; color: var(--muted); }
+}
+.hero-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  b { color: var(--text); }
+}
+.personal-list { display: flex; flex-direction: column; gap: var(--space-2); }
+
 .ex-strip {
   display: flex;
   flex-shrink: 0;
@@ -488,6 +589,7 @@ const medals = ['🥇', '🥈', '🥉']
   .positive { color: var(--pr); }
   .negative { color: var(--accent); }
 }
+.favorite-metrics.four { grid-template-columns: repeat(4, 1fr); }
 .favorite-sessions { font-size: 11px; color: var(--muted); }
 .favorite-empty { margin: 0; font-size: 13px; color: var(--muted); }
 
@@ -592,6 +694,15 @@ const medals = ['🥇', '🥈', '🥉']
   em { display: block; font-style: normal; font-size: 11px; font-weight: 600; }
   &.up { color: var(--pr); }
   &.down { color: var(--accent); }
+}
+.not-ready {
+  flex-shrink: 0;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .tiles {
