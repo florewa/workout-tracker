@@ -11,8 +11,11 @@ set -eu
 telegram_base="${TELEGRAM_API_BASE:-https://api.telegram.org}"
 postgres_host="${POSTGRES_HOST:-db}"
 stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+backup_timezone="${BACKUP_TIMEZONE:-Europe/Samara}"
+backup_timezone_label="${BACKUP_TIMEZONE_LABEL:-Ижевск}"
+local_stamp="$(TZ="${backup_timezone}" date '+%Y-%m-%d %H:%M:%S')"
 safe_stamp="$(printf '%s' "${stamp}" | tr -d ':-')"
-dump_path="$(mktemp "/tmp/workout-backup-${safe_stamp}.XXXXXX.dump")"
+dump_path="$(mktemp "/tmp/workout-backup-${safe_stamp}.dump.XXXXXX")"
 deliver_path="${dump_path}"
 verify_db="workout_restore_check_${safe_stamp}_$$"
 verify_created=0
@@ -20,7 +23,7 @@ sent_count=0
 export PGPASSWORD="${POSTGRES_PASSWORD}"
 
 send_failure() {
-  message="Бэкап «Твой Подход» НЕ СОЗДАН (${stamp} UTC). Проверь backup-cron.log."
+  message="Бэкап «Твой Подход» НЕ СОЗДАН (${local_stamp}, ${backup_timezone_label}). Проверь backup-cron.log."
   old_ifs="${IFS}"
   IFS=','
   for raw_chat_id in ${BACKUP_TELEGRAM_IDS}; do
@@ -105,7 +108,7 @@ for raw_chat_id in ${BACKUP_TELEGRAM_IDS}; do
   curl --fail --silent --show-error --max-time 120 \
     -X POST "${telegram_base}/bot${BOT_TOKEN}/sendDocument" \
     -F "chat_id=${chat_id}" \
-    -F "caption=Твой Подход — проверенный полный бэкап БД ${stamp} UTC" \
+    -F "caption=Твой Подход — проверенный полный бэкап БД ${local_stamp} (${backup_timezone_label})" \
     -F "document=@${deliver_path};filename=${filename}" >/dev/null
   sent_count=$((sent_count + 1))
   echo "Verified backup sent to Telegram chat ${chat_id}"

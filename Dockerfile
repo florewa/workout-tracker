@@ -37,7 +37,7 @@ CMD ["npx", "drizzle-kit", "migrate"]
 
 # ── backup: pg_dump + доставка архива через Telegram Bot API ──
 FROM postgres:16-alpine AS backup
-RUN apk add --no-cache age curl
+RUN apk add --no-cache age curl tzdata
 COPY deploy/backup-database.sh /usr/local/bin/backup-database
 RUN chmod 755 /usr/local/bin/backup-database
 CMD ["backup-database"]
